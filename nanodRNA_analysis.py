@@ -1,6 +1,6 @@
 ###Stavros Giannoukakos### 
 #Version of the program
-__version__ = "0.1.5"
+__version__ = "0.1.7"
 
 import argparse
 import subprocess
@@ -17,7 +17,7 @@ refTranscGRCh38_ensembl = "/home/stavros/references/reference_transcriptome/Ense
 refAnnot = "/home/stavros/references/reference_annotation/GRCh38_gencode.v31.primary_assembly.annotation.gtf"
 refAnnot_ensembl = "/home/stavros/references/reference_annotation/Ensembl/Homo_sapiens.GRCh38.99.gtf"
 reference_annotation_bed = "/home/stavros/references/reference_annotation/hg38_gencode.v31.allComprehensive_pseudo.annotation.bed"
-rscripts = "{0}/Rscripts".format(os.getcwd())
+rscripts = "{0}/Rscripts".format(os.path.dirname(os.path.realpath(__file__)))
 
 talon_database = "/home/stavros/playground/progs/TALON/talon_db/talon_gencode_v31.db"  ### TALON
 transcriptclean = "python3 /home/stavros/playground/progs/TranscriptClean/TranscriptClean.py"  ### TranscriptClean
@@ -26,48 +26,51 @@ chrom_size = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAs
 
 
 
-usage = "ont_analysis [options]"
+usage = "nanodRNA_analysis [options]"
 epilog = " -- June 2019 | Stavros Giannoukakos -- "
 description = "DESCRIPTION"
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, usage=usage, description=description, epilog=epilog)
 # Number of threads/CPUs to be used
-parser.add_argument('-t', '--threads', dest='threads', default=str(15), metavar='', 
+parser.add_argument('-t', '--threads', dest='threads', default=str(50), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Genes expressed in minimum this many samples
 parser.add_argument('-msge', '--minSampsGeneExpr', dest='minSampsGeneExpr', default=str(3), metavar='', 
-                	help="A transcript must be mapped to a gene in at least this minimum number of samples for the gene be included in the analysis")
+                	help="A transcript  must be mapped to a gene in at\nleast this minimum number of samples for the\ngene be included in the analysis")
 # Transcripts expressed in minimum this many samples
 parser.add_argument('-msfe', '--minSampsFeatureExpr', dest='minSampsFeatureExpr', default=str(2), metavar='', 
-                	help="A transcript must be mapped to an isoform at least this minimum number of samples for the gene isoform to be included in the analysis")
+                	help="A transcript must be mapped to an isoform at\nleast this minimum number of samples for the\ngene isoform to be included in the analysis")
 # Minimum gene counts
 parser.add_argument('-mge', '--minGeneExpr', dest='minGeneExpr', default=str(10), metavar='', 
-                	help="Minimum number of total mapped sequence reads for a gene to be considered expressed")
+                	help="Min. number of total mapped sequence reads\nfor a gene to be considered expressed")
 # Minimum transcript counts
 parser.add_argument('-mfe', '--minFeatureExpr', dest='minFeatureExpr', default=str(10), metavar='', 
-                	help="Minimum number of total mapped sequence reads for a gene isoform to be considered")
+                	help="Min. number of total mapped sequence reads\nfor a gene isoform to be considered")
 # Adjusted p-value threshold for differential expression analysis
 parser.add_argument('-p', '--adjPValueThreshold', dest='adjPValueThreshold', default=str(0.05), metavar='', 
-                	help="Adjusted p-value threshold for differential expression analysis")
+                	help="Adjusted p-value threshold for differential\nexpression analysis")
 # Minimum required log2 fold change for differential expression analysis
-parser.add_argument('-lfc', '--minFeatureExpr', dest='minFeatureExpr', default=str(1), metavar='', 
-                	help="Minimum required log2 fold change for differential expression analysis")
+parser.add_argument('-lfc', '--lfcThreshold', dest='lfcThreshold', default=str(1), metavar='', 
+                	help="Minimum required log2 fold change for diffe-\nrential expression analysis")
 # Top N genes to be used for the heatmap
 parser.add_argument('-n', '--n_top', dest='n_top', default=str(50), metavar='', 
                 	help="Top N genes to be used for the heatmap")
-
-
+# Transcripts expressed in minimum this many samples (for DTU)
+parser.add_argument('-msfedtu', '--minSampsFeatureExprDTU', dest='minSampsFeatureExprDTU', default=str(1), metavar='', 
+                	help="A transcript must be mapped to an isoform at\nleast this minimum number of samples for the\ngene isoform to be included in the analysis\nfor DTU only")
+# Minimum transcript counts for DTU
+parser.add_argument('-mfedtu', '--minFeatureExprDTU', dest='minFeatureExprDTU', default=str(3), metavar='', 
+                	help="Minimum number of total mapped sequence reads\nfor a gene isoform to be considered for DTU")
 # Display the version of the pipeline 
 parser.add_argument('-v', '--version', action='version', version='%(prog)s {0}'.format(__version__))
 # Get the options and return them
 args = parser.parse_args()
 
-current_dir = os.path.dirname(os.path.realpath(__file__))
+script_dir = os.path.dirname(os.path.realpath(__file__))
 startTime = datetime.now()
 
 # Main folder hosting the analysis
-# analysis_dir = os.path.join(current_dir, "analysis_july08")
-analysis_dir = os.path.join(current_dir, "analysis_june15")
+analysis_dir = os.path.join(script_dir, "analysis_july08")
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")
 alignments_dir = os.path.join(analysis_dir, "alignments")
 reports_dir = os.path.join(analysis_dir, "reports")
@@ -181,7 +184,6 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# "2>>", os.path.join(pipeline_reports, "alignment_qc-report.txt")])
 	# subprocess.run(alignment_qc, shell=True)
 
-
 	### EXPORTING ALIGNMENT STATS
 	print("{0}  PycoQC - Generating post-alignment stats of {1}: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M"), sample_id))
 	pycoQC = " ".join([
@@ -271,26 +273,24 @@ def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
 
 class expression_matrix:
 
-	def __init__(self, threads, chosen_samples):
+	def __init__(self, chosen_samples):
 		if not os.path.exists(expression_analysis_dir): os.makedirs(expression_analysis_dir)
-		
-		# self.genome_perGene_em_featureCounts(threads)
+		# self.genome_perGene_em_featureCounts()
 		self.novel_transcripts_detection_talon(threads)
 		# self.novel_transcripts_detection_flair(threads, chosen_samples)
 		return
 
-	def genome_perGene_em_featureCounts(self, threads):
-
-		genome_alignments = [sum_file for sum_file in glob.glob(os.path.join(alignments_dir, "*.genome.bam"))]
+	def genome_perGene_em_featureCounts(self):
 		print("\n\t{0} GENERATING THE PER-GENE EXPRESSION MATRIX".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 
 		featureCounts_analysis = os.path.join(expression_analysis_dir, 'featureCounts_analysis')
 		if not os.path.exists(featureCounts_analysis): os.makedirs(featureCounts_analysis)
-
+		genome_alignments = [sum_file for sum_file in glob.glob(os.path.join(alignments_dir, "*.genome.bam"))]
+		
 		print("{0}  FeatureCounts perGene - Counting reads from the genome aligned data: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 		featureCounts_gn = " ".join([
 		"featureCounts",  # Call featureCounts
-		"-T", threads,  # Number of threads to be used by the script
+		"-T", args.threads,  # Number of threads to be used by the script
 		"-a", refAnnot,  # Annotation file in GTF/GFF format
 		"-L",  # Count long reads such as Nanopore and PacBio reads
 		"-o", os.path.join(featureCounts_analysis, "genome_alignments_perGene_sum.tab"),
@@ -357,9 +357,10 @@ class expression_matrix:
 		featureCounts_analysis,  # Output dir
 		"2>>", os.path.join(pipeline_reports, "R_gene_type_sum-report.txt")])  # Directory where all reports reside
 		subprocess.run(gene_type_sum, shell=True)
+		os.system('rm {0}/featureCounts_expression_perGene_matrix.txt {0}/genome_alignments_perGene_sum.tab'.format(featureCounts_analysis))
 		return
 
-	def novel_transcripts_detection_talon(self, threads):
+	def novel_transcripts_detection_talon(self):
 		""" TALON takes transcripts from one or more long read datasets (SAM format) 
 		and assigns them transcript and gene identifiers based on a database-bound
 		annotation. Novel events are assigned new identifiers """
@@ -382,7 +383,7 @@ class expression_matrix:
 							talon_out.write('{0},{1},ONT,{2}\n'.format(file.split(".")[0], file.split(".")[0].split("_")[0], os.path.join(temp, file).replace(".genome.bam", ".clean_labeled.sam")))
 							if not os.path.exists(os.path.join(path, file).replace(".bam", ".sam")):
 								print("{0}  Samtools - Converting the genomic bam file ({1}) to sam for Talon: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M"), file))
-								os.system('samtools view -h -@ {0} {1} > {2}'.format(threads, os.path.join(path, file), os.path.join(path, file).replace(".bam", ".sam")))
+								os.system('samtools view -h -@ {0} {1} > {2}'.format(args.threads, os.path.join(path, file), os.path.join(path, file).replace(".bam", ".sam")))
 
 		
 		### Initial step: Building the reference database
@@ -405,7 +406,7 @@ class expression_matrix:
 			transcriptclean,  # Call TranscriptClean.py
 			"--sam", file,  # Input sam file
 			"--genome", refGenomeGRCh38_traclean,  # Reference genome fasta file
-			"--threads", threads,  # Number of threads to be used by the script
+			"--threads", args.threads,  # Number of threads to be used by the script
 			"--spliceJns", sj_ref,  # Splice junction file extracted from the ref. GTF
 			"--deleteTmp",  # the temporary directory (TC_tmp) will be removed
 			"--outprefix", os.path.join(temp, os.path.basename(file).split(".")[0]),  # Outprefix for the outout file
@@ -419,7 +420,7 @@ class expression_matrix:
 		for file in genome_alignments:
 			talon_priming_check = " ".join([
 			"talon_label_reads",  # Call talon talon_label_reads
-			"--t", threads,  # Number of threads to be used by the script
+			"--t", args.threads,  # Number of threads to be used by the script
 			"--f", file,  # Input sam file
 			"--g", refGenomeGRCh38,  # Reference genome fasta file
 			"--tmpDir", os.path.join(talon_analysis, "tmp_label_reads"),  # Path to directory for tmp files
@@ -432,7 +433,7 @@ class expression_matrix:
 		print("{0}  4/ TALON - Annotating and quantification of the reads: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 		talon_annotation = " ".join([
 		"talon",  # Call talon
-		"--threads", threads,  # Number of threads to be used by the script
+		"--threads", args.threads,  # Number of threads to be used by the script
 		"--db", talon_database,  # TALON database
 		"--build", 'hg38',  # Genome build (i.e. hg38) to use
 		"--o", os.path.join(talon_analysis, "prefilt"),  # Prefix for output files
@@ -510,7 +511,7 @@ class expression_matrix:
 		"--o", os.path.join(talon_analysis, "database"),  # Output
 		"2>>", os.path.join(pipeline_reports, "talon10_export_db-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_export_db, shell=True)
-
+		
 		
 		############ DIFFERENTIAL ANALYSIS ############
 
@@ -522,12 +523,11 @@ class expression_matrix:
 		os.path.join(talon_analysis, "filt_talon_abundance.tsv"),  # Input filtered matrix
 		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
-		"10",  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
-		"50",  # Top 50 genes for creating the heatmap
-		R_expl_analysis,  # Output directory
+		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
+		args.n_top,  # Top 50 genes for creating the heatmap
 		"2>>", os.path.join(pipeline_reports, "talon11_exploratory_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(expl_analysis, shell=True)
-
+		
 		### Twelfth step: DGE
 		print("{0}  12/ TALON - Differential Gene Expression (DGE) analysis using DRIMSeq/edgeR: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 		dge_analysis = " ".join([
@@ -536,13 +536,13 @@ class expression_matrix:
 		os.path.join(talon_analysis, "filt_talon_abundance.tsv"),  # Input filtered matrix
 		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
-		"3",  # minSampsGeneExpr - Genes expressed in minimum this many samples
-		"10",  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
-		"0.05",  # adjPValueThreshold - Adjusted p-value threshold for differential expression
-		"1",  # lfcThreshold - Minimum required log2 fold change for differential expression
+		args.minSampsGeneExpr,  # minSampsGeneExpr - Genes expressed in minimum this many samples
+		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
+		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
+		args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression
 		"2>>", os.path.join(pipeline_reports, "talon12_dge_analysis-report.txt")])  # Directory where all reports reside
-		subprocess.run(dge_analysis, shell=True)
-
+		# subprocess.run(dge_analysis, shell=True)
+		
 		### Thirteenth step: DTE
 		print("{0}  13/ TALON - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 		dte_analysis = " ".join([
@@ -551,10 +551,10 @@ class expression_matrix:
 		os.path.join(talon_analysis, "filt_talon_abundance.tsv"),  # Input filtered matrix
 		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
-		"2",  # minSampsFeatureExpr -  A transcript must be mapped to an isoform at least this minimum number of samples for the gene isoform to be considered
-		"10",  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
-		"0.05",  # adjPValueThreshold - Adjusted p-value threshold for differential expression
-		"1",  # lfcThreshold - Minimum required log2 fold change for differential expression		
+		args.minSampsFeatureExpr,  # minSampsFeatureExpr -  A transcript must be mapped to an isoform at least this minimum number of samples for the gene isoform to be considered
+		args.minFeatureExpr,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
+		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
+		args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression		
 		"2>>", os.path.join(pipeline_reports, "talon13_dte_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(dte_analysis, shell=True)
 
@@ -566,16 +566,16 @@ class expression_matrix:
 		os.path.join(talon_analysis, "filt_talon_abundance.tsv"),  # Input filtered matrix
 		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
-		"3",  # minSampsGeneExpr - Genes expressed in minimum this many samples
-		"2",  # minSampsFeatureExpr -  A transcript must be mapped to an isoform at least this minimum number of samples for the gene isoform to be considered
-		"10",  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
-		"10",  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
-		"0.05",  # adjPValueThreshold - Adjusted p-value threshold for differential expression
-		"1",  # lfcThreshold - Minimum required log2 fold change for differential expression
-		threads,  # Num of threads to use
+		args.minSampsGeneExpr,  # minSampsGeneExpr - Genes expressed in minimum this many samples
+		args.minSampsFeatureExprDTU,  # minSampsFeatureExpr -  A transcript must be mapped to an isoform at least this minimum number of samples for the gene isoform to be considered
+		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
+		args.minFeatureExprDTU,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
+		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
+		args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression
+		args.threads,  # Num of threads to use
 		"2>>", os.path.join(pipeline_reports, "talon14_dtu_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(dtu_analysis, shell=True)
-		
+
 
 		############ ANNOTATION VISUALISATION ############
 
@@ -639,7 +639,7 @@ class expression_matrix:
 		os.system("rm -r {0}".format("talon_tmp"))
 		return
 
-	def novel_transcripts_detection_flair(self, threads, chosen_samples):
+	def novel_transcripts_detection_flair(self, chosen_samples):
 		print("\n\t{0} ANNOTATION AND QUANTIFICATION USING FLAIR".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 		flair_analysis = os.path.join(expression_analysis_dir, 'flair_analysis')
 		if not os.path.exists(flair_analysis): os.makedirs(flair_analysis)
@@ -660,7 +660,7 @@ class expression_matrix:
 			flair_correct = " ".join([
 			"python3 /home/stavros/playground/progs/flair/flair.py correct",  # Calling flair correct
 			"--gtf", refAnnot,  # GTF ref. annotation file
-			"--threads", threads,  # Number of cores to use
+			"--threads", args.threads,  # Number of cores to use
 			"--genome", refGenomeGRCh38,  # Input ref. genome
 			"--output", os.path.join(flair_analysis,'{0}_flair_correct'.format(os.path.basename(file)[:-6])),  # Output name base
 			"--query", file,  # Uncorrected bed12 file
@@ -685,7 +685,7 @@ class expression_matrix:
 				fastq_files.append(fastq_file)
 		flair_collapse = " ".join([
 		"python3 /home/stavros/playground/progs/flair/flair.py collapse",  # Calling flair collapse
-		"--threads", threads,  # Number of cores to use
+		"--threads", args.threads,  # Number of cores to use
 		"--gtf", refAnnot,  # GTF ref. annotation file
 		"--genome", refGenomeGRCh38,  # FastA of reference genome
 		"--query", merged_psl,  # Corrected psl file
@@ -698,7 +698,7 @@ class expression_matrix:
 		collapsed_isoforms = os.path.join(flair_analysis, "flair.collapse.isoforms.fa")
 		flair_quantify = " ".join([
 		"python3 /home/stavros/playground/progs/flair/flair.py quantify",  # Calling flair quantify
-		"--threads", threads,  # Number of cores to use
+		"--threads", args.threads,  # Number of cores to use
 		"--reads_manifest", flair_csv_file,  # Tab delimited file containing: sample id, condition, batch, reads.fq
 		"--isoforms", collapsed_isoforms,  # Fasta input from FLAIR collapsed isoforms
 		"--tpm",  # TPM column
@@ -711,7 +711,7 @@ class expression_matrix:
 		# flair_de = " ".join([
 		# # "python3 /home/stavros/playground/progs/flair/flair.py diffExp",  # Calling flair diffExp
 		# "/home/stavros/playground/progs/anaconda3/envs/flair_env/bin/python /home/stavros/playground/progs/flair/flair.py diffExp",  # Calling flair diffExp
-		# "--threads", threads,  # Number of cores to use
+		# "--threads", args.threads,  # Number of cores to use
 		# "--counts_matrix", os.path.join(flair_analysis, "flair_expression_matrix.tsv"),  # Tab-delimited isoform count matrix from flair quantify module
 		# "--out_dir", os.path.join(flair_analysis, "diffExp"),  # output file
 		# "--out_dir_force",
@@ -721,7 +721,7 @@ class expression_matrix:
 		# print("{0}  7/ FLAIR DS - Differential Splicing analysis using DRIMSeq: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 		# flair_ds = " ".join([
 		# "python3 /home/stavros/playground/progs/flair/flair.py diffSplice",  # Calling flair diffSplice
-		# "--threads", threads,  # Number of cores to use
+		# "--threads", args.threads,  # Number of cores to use
 		# "--counts_matrix", os.path.join(flair_analysis, "flair_expression_matrix.tsv"),  # Tab-delimited isoform count matrix from flair quantify module
 		# "--isoforms", os.path.join(flair_analysis,"flair.collapse.isoforms.psl"),  # Isoforms in bed format
 		# "--output", os.path.join(flair_analysis, "flair.diffsplice"),  # output file
@@ -754,7 +754,6 @@ class special_analysis:
 
 	def __init__(self, threads):
 		self.polyA_length_est_analysis()
-		self.nanotail_analysis(nanopolish_file, sample_info, what)
 		# self.methylation_detection()
 		return
 
@@ -776,35 +775,33 @@ class special_analysis:
 				if name.endswith("polya_results.tsv"):
 					sample = name.split(".")[0]
 					polyA_length_est = os.path.join(path, name)
-					if sample == "Tumour_1":
-						with open(polyA_length_est) as fin, \
-							 open(polyA_length_est.replace(".tsv",".transcripts.tsv"), "w") as transcript_out,\
-							 open(polyA_length_est.replace(".tsv",".genes.tsv"), "w") as gene_out:
-							for i, line in enumerate(fin, 1):
-								if i == 1:
-									transcript_out.write("{0}\n".format(line.strip()))
-									gene_out.write("{0}\n".format(line.strip()))
-								else:
-									readname = line.strip().split("\t")[0]
-									contig = "{0}_{1}.{1}".format(line.strip().split("\t")[1], i)
-									transcript_id = read_annot_dict[(sample ,readname)][0] if (sample ,readname) in read_annot_dict else contig
-									gene_id = read_annot_dict[(sample ,readname)][1] if (sample ,readname) in read_annot_dict else contig
-									rest = "\t".join(line.strip().split("\t")[2:])
-									transcript_out.write("{0}\t{1}\t{2}\n".format(readname, transcript_id, rest))
-									gene_out.write("{0}\t{1}\t{2}\n".format(readname, transcript_id, rest))
+					with open(polyA_length_est) as fin, \
+						 open(polyA_length_est.replace(".tsv",".transcripts.tsv"), "w") as transcript_out,\
+						 open(polyA_length_est.replace(".tsv",".genes.tsv"), "w") as gene_out:
+						for i, line in enumerate(fin, 1):
+							if i == 1:
+								transcript_out.write("{0}\n".format(line.strip()))
+								gene_out.write("{0}\n".format(line.strip()))
+							else:
+								readname = line.strip().split("\t")[0]
+								contig = "NNNN0000{1}.{1}".format(line.strip().split("\t")[1], i)
+								transcript_id = read_annot_dict[(sample ,readname)][0] if (sample ,readname) in read_annot_dict else contig
+								gene_id = read_annot_dict[(sample ,readname)][1] if (sample ,readname) in read_annot_dict else contig
+								rest = "\t".join(line.strip().split("\t")[2:])
+								transcript_out.write("{0}\t{1}\t{2}\n".format(readname, transcript_id, rest))
+								gene_out.write("{0}\t{1}\t{2}\n".format(readname, gene_id, rest))
 					
 					# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
-					sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir_idv)
-					with open(sample_info_transcripts, "w") as fout_tr:
+					sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir)
+					with open(sample_info_transcripts, "a") as fout_tr:
 						fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
-					nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
-					# Gene  level analysis
+					# nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
 					
 					# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
-					sample_info_genes = "{0}/polyA_gene_info.csv".format(polyA_analysis_dir_idv)
-					with open(sample_info_genes, "w") as fout_gene:
+					sample_info_genes = "{0}/polyA_gene_info.csv".format(polyA_analysis_dir)
+					with open(sample_info_genes, "a") as fout_gene:
 						fout_gene.write("{0},{1},{2}/{0}/{0}.polya_results.genes.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
-					nanotail_analysis(sample_info_genes, "gene")
+					# nanotail_analysis(sample_info_genes, "gene")  # Gene  level analysis
 		return
 
 	def nanotail_analysis(self, sample_info, what):
@@ -937,8 +934,8 @@ def summary():
 
 def main():
 	
-	# chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
-	chosen_samples = ("Tumour_1")
+	chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
+	# chosen_samples = ("Tumour_1")
 
 
 	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
