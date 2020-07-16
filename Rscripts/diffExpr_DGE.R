@@ -11,13 +11,13 @@ if (length(args) == 7) {
   # Output direcotry where all stats will be saves
   main_outdir <- args[3]
   # Genes expressed in minimum this many samples
-  minSampsGeneExpr <- args[4]
+  minSampsGeneExpr <- as.numeric(args[4])
   # Minimum gene counts
-  minGeneExpr <- args[5]
+  minGeneExpr <- as.numeric(args[5])
   # Adjusted p-value threshold for differential expression analysis
-  adjPValueThreshold <- args[6]
+  adjPValueThreshold <- as.numeric(args[6])
   # Minimum required log2 fold change for differential expression analysis
-  lfcThreshold <- args[7]
+  lfcThreshold <- as.numeric(args[7])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -49,6 +49,9 @@ setwd(outdir)
 
 # Input the filtered expression matrix
 expr_file <- read.csv(matrix)
+# Exporting the unfiltered table
+write.table(expr_file, file=paste(outdir,"/edgeR_prefiltered_table.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+
 print(paste("Total number of unique genes:", length(unique(expr_file$annot_gene_id)), sep=" " ))
 
 # Obtain number of input samples
@@ -124,20 +127,20 @@ edgeR_table <- calcNormFactors(edgeR_table)
 # Estimating common dispersion and tagwise dispersions 
 edgeR_table <- estimateDisp(edgeR_table, design)
 
-# Plotting the per-gene dispersion estimates
-png(paste(outdir,"/edgeR_DispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-plotBCV(edgeR_table)
-title(main = "Dispersion Estimates")
-dev.off()
+# # Plotting the per-gene dispersion estimates
+# png(paste(outdir,"/edgeR_DispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
+# plotBCV(edgeR_table)
+# title(main = "Dispersion Estimates")
+# dev.off()
 
 # Performing quasi-likelihood F-tests
 fit <- glmQLFit(edgeR_table, design)
 
-# Plotting the quasi-likelihood dispersion  estimates
-png(paste(outdir,"/edgeR_QLDispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-plotQLDisp(fit)
-title(main = "QL Dispersion Estimates")
-dev.off()
+# # Plotting the quasi-likelihood dispersion  estimates
+# png(paste(outdir,"/edgeR_QLDispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
+# plotQLDisp(fit)
+# title(main = "QL Dispersion Estimates")
+# dev.off()
 
 qlf <- glmQLFTest(fit)
 
@@ -170,33 +173,59 @@ results_selected <- total_results[(abs(total_results$log2FoldChange)>=lfcThresho
 results_selected <- results_selected[with(results_selected, order(pval, padj)), ]
 # Exporting the normalised results table containing the selected features with log2FoldChange greater than 1 and adjusted p value lower than the user-input value
 write.table(results_selected, file=paste(outdir,"/",sampletypevalues[1],"VS",sampletypevalues[2],"_edgeR_topGenesBelow", gsub("[.]", "", adjPValueThreshold), "LFC", gsub("[.]", "", lfcThreshold), ".csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+rm(design, drimseq, fit, qlf)
+
+# # Plotting log-fold change against log-counts per million, with DE genes highlighted
+# png(paste(outdir,"/edgeR_MDPlot.png",sep=""), units='px', height=900, width=1600, res=90)
+# plotMD(qlf)
+# abline(h=c(-lfcThreshold, lfcThreshold), col="blue")
+# dev.off()
 
 
-# Plotting log-fold change against log-counts per million, with DE genes highlighted
-png(paste(outdir,"/edgeR_MDPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-plotMD(qlf)
-abline(h=c(-lfcThreshold, lfcThreshold), col="blue")
-dev.off()
-
-
-# MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
+# MA-plot
 logUp <- which(edger_res_overall$logFC >= lfcThreshold)
 logDown <- which(edger_res_overall$logFC <= -lfcThreshold)
 withStat <- which(edger_res_overall$FDR <= adjPValueThreshold)
-colours <- c(noDifference="dimgray", upRegulated="indianred3", downRegulated="mediumseagreen")
+colours <- c(noDifference="dimgray", upRegulated="mediumseagreen", downRegulated="indianred3")
 gene <- rep("noDifference", nrow(edger_res_overall))
 gene[logUp[logUp %in% withStat]] <- "upRegulated"
 gene[logDown[logDown %in% withStat]] <- "downRegulated"
 ggplot(data.frame(edger_res_overall), aes(y=logFC, x=logCPM)) + 
         geom_point(size=1.2) + 
-        geom_hline(yintercept = -lfcThreshold, color="mediumseagreen") + 
-        geom_hline(yintercept = lfcThreshold, color="indianred3") +
+        geom_hline(yintercept = -lfcThreshold, color="indianred3") + 
+        geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
         theme_bw() +
         aes(colour=gene) + 
         scale_colour_manual(name="Genes", values=colours) +
         labs(title="MA plot - log(FC) vs. log(CPM) on gene level data", x="log(CountsPerMillion)", y="log(FoldChange)")
 ggsave(file=paste(outdir,"/edgeR_MAplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 rm(is.de, logUp, logDown, withStat, colours, gene)
+
+
+# MA-plot
+withNovel <- expr_file[grepl("^TALON[^*]+$", expr_file$annot_transcript_id), ]
+withNovel <- as.vector(withNovel$annot_gene_id)
+withNovel <- which(rownames(edger_res_overall) %in% withNovel)
+edger_res_overall$novelty <- 16
+edger_res_overall[withNovel, length(edger_res_overall)] <- 18
+edger_res_overall$novelty = as.factor(edger_res_overall$novelty)
+logUp <- which(edger_res_overall$logFC >= lfcThreshold)
+logDown <- which(edger_res_overall$logFC <= -lfcThreshold)
+withStat <- which(edger_res_overall$FDR <= adjPValueThreshold)
+colours <- c(noDifference="dimgray", upRegulated="mediumseagreen", downRegulated="indianred3")
+gene <- rep("noDifference", nrow(edger_res_overall))
+gene[logUp[logUp %in% withStat]] <- "upRegulated"
+gene[logDown[logDown %in% withStat]] <- "downRegulated"
+ggplot(edger_res_overall, aes(x=logCPM, y=logFC)) + 
+       geom_point(aes(shape=factor(novelty,  labels=c("Known", "Novel")))) +
+       geom_hline(yintercept = -lfcThreshold, color="indianred3") +
+       geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
+       theme_bw() +
+       aes(colour=gene) +
+       scale_colour_manual(name="Genes", values=colours) +
+       labs(title="MA plot - log(FC) vs. log(CPM) on gene level data with Known/Novel-transcript indication", x="log(CountsPerMillion)", y="log(FoldChange)", shape="Known/Novel")
+ggsave(file=paste(outdir,"/edgeR_MAplot_withTranscriptIndications.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+rm(logUp, logDown, withStat, colours, gene,withNovel)
 
 
 # Volcano plot
@@ -232,7 +261,7 @@ text(edger_res_overall$logFC[gn.selected], edger_res_overall$significant[gn.sele
 dev.off()
 rm(genes.to.plot, cols, gn.selected)
 edger_res_overall$significant <- NULL; edger_res_overall$pch  <- NULL; #edger_res_overall$gene_name <- NULL
-rm(fit, qlf, gene_filt_counts)
+rm(gene_filt_counts)
 
 
 ### TOP 30 DE GENES
@@ -259,3 +288,58 @@ ggplot(melt_top30_sigNorm, aes(x = gene_name, y = value, color = group)) +
   theme(legend.position="bottom")
 ggsave(file=paste(outdir,"/edgeR_top30MostSingificantGenes.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 rm(melt_top30_sigNorm, top30_sigNorm)
+rm(matrix, filtered_counts, edgeR_table, edger_res, edger_res_overall)
+
+
+########### Gene Set Enrichment Analysis with ClusterProfiler ########### 
+library("clusterProfiler")
+library("enrichplot")
+library("DOSE")
+set.seed("12345")
+
+
+# Setting the desired  organism
+organism = "org.Hs.eg.db"
+# BiocManager::install("org.Hs.eg.db", character.only = TRUE)
+library(organism, character.only = TRUE)
+
+# Obtaining the log2 fold change 
+original_gene_list <- total_results$log2FoldChange
+# Naming the vector
+names(original_gene_list) <- sub("\\..*", "", total_results$gene_id)
+# Omitting any NA values 
+gene_list<- na.omit(original_gene_list)
+# Sort the list in decreasing order (required for clusterProfiler)
+gene_list = sort(gene_list, decreasing = TRUE)
+
+# Gene Set Enrichment
+gse <- gseGO(geneList=gene_list, 
+             ont ="ALL", 
+             keyType = "ENSEMBL", 
+             nPerm = 10000, 
+             minGSSize = 3, 
+             maxGSSize = 800, 
+             pvalueCutoff =  adjPValueThreshold, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "none")
+
+dotplot(gse, showCategory=20, split=".sign") + facet_grid(.~.sign)
+ggsave(file=paste(outdir,"/clusterProfiler_dotPlot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+
+# Enrichment map organizes enriched terms into a network with edges connecting overlapping gene sets. 
+# In this way, mutually overlapping gene sets are tend to cluster together, making it easy to identify 
+# functional modules.
+emapplot(gse, showCategory = 20)
+ggsave(file=paste(outdir,"/clusterProfiler_enrichmentMap.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+
+# The cnetplot depicts the linkages of genes and biological concepts (e.g. GO terms or KEGG pathways)
+# as a network (helpful to see which genes are involved in enriched pathways and genes that may belong
+# to multiple annotation categories).
+# cnetplot(gse, categorySize="pvalue", foldChange=gene_list, showCategory = 3)
+# ggsave(file=paste(outdir,"/clusterProfiler_categoryNetplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+
+# Grouped by gene set, density plots are generated by using the frequency of fold change values per gene
+# within each set. Helpful to interpret up/down-regulated pathways.
+ridgeplot(gse) + labs(x = "enrichment distribution")
+ggsave(file=paste(outdir,"/clusterProfiler_ridgeplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)

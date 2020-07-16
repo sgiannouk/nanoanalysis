@@ -3,29 +3,33 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 5) {
+if (length(args) == 6) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
+  # Read annotation file
+  read_annot <- args[2]
   # CSV file used for running TALON
-  input_groups <- args[2]
+  input_groups <- args[3]
   # Output direcotry where all stats will be saves
-  main_outdir <- args[3]
+  main_outdir <- args[4]
   # Minimum gene counts
-  minGeneExpr <- args[4]
+  minGeneExpr <- as.numeric(args[5])
   # Top N genes to be used for the heatmap
-  n_top <- args[5]
+  n_top <- as.numeric(args[6])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
 }
 
-matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/filt_talon_abundance.tsv"
-input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/talon_input.csv"
-main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/diffExpr_analysis"
-minGeneExpr <- 10  # Minimum gene counts
-n_top <- 50
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/filt_talon_abundance.tsv"
+# read_annot <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/prefilt_talon_read_annot.tsv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/diffExpr_analysis"
+# minGeneExpr <- 10  # Minimum gene counts
+# n_top <- 50
 
 
+library("readr")
 library("edgeR")
 library("dplyr")
 library("plotly")
@@ -239,5 +243,22 @@ ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) +
       theme_bw() +
       theme(legend.position="bottom") +
       theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-      labs(title="Number of transcript usage per condition", x="Number of transcprits", y="Frequency") +
+      labs(title="Number of isoform usage per condition", x="Number of transcprits", y="Frequency") +
 ggsave(file=paste(outdir, "/explAnalysis_TrNumPerCondition.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+
+
+# Input annotation file 
+annot <- read_tsv(read_annot, col_names=TRUE)
+# Ordering the matrix based on the transcript length
+annot <- annot[order(annot$read_length, decreasing = TRUE), ]
+# Obtaining the top 100 reads based on length
+annot_subset <- annot[c(1:100), ]
+# Outputing the table
+write.table(annot_subset, file=paste(outdir,"/top100_readLength.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+# Plot
+ggplot(annot, aes(x=read_length)) + 
+       geom_histogram(bins = 1000) + 
+       labs(title="Pre filtered read length distribution", x="Read length", y="Frequency") +
+       theme_bw()
+ggsave(file=paste(outdir, "/explAnalysis_readLengthDistribution.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+

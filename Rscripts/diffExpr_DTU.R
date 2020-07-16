@@ -12,22 +12,22 @@ if (length(args) == 10) {
   main_outdir <- args[3]
   # A transcript must be mapped to a gene in at least this minimum
   # number of samples for the gene be included in the analysis
-  minSampsGeneExpr <- args[4]
+  minSampsGeneExpr <- as.numeric(args[4])
   # A transcript must be mapped to an isoform at least this minimum
   # number of samples for the gene isoform to be included in the analysis
-  minSampsFeatureExpr <- args[5]
+  minSampsFeatureExpr <- as.numeric(args[5])
   # Minimum number of total mapped sequence reads 
   # for a gene to be considered expressed
-  minGeneExpr <- args[6]
+  minGeneExpr <- as.numeric(args[6])
   # Minimum number of total mapped sequence reads 
   # for a gene isoform to be considered
-  minFeatureExpr <- args[7]
+  minFeatureExpr <- as.numeric(args[7])
   # Adjusted p-value threshold for differential expression analysis
-  adjPValueThreshold <- args[8]
+  adjPValueThreshold <- as.numeric(args[8])
   # Minimum required log2 fold change for differential expression analysis
-  lfcThreshold <- args[9]
+  lfcThreshold <- as.numeric(args[9])
   # Number of cores to be used for the differential expression analysis
-  threads <- args[10]
+  threads <- as.numeric(args[10])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -142,11 +142,11 @@ dxd <- estimateSizeFactors(dxd)
 dxd <- estimateDispersions(dxd, BPPARAM=BPPARAM)
 rm(sample.data, count.data)
 
-# Plotting the per-gene dispersion estimates together with the fitted mean-dispersion relationship.
-png(paste(outdir,"/DEXSeq_DispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-plotDispEsts(dxd, xlab = "Mean of normalized counts", ylab = "Dispersion")
-title(main = "Dispersion Estimates")
-dev.off()
+# # Plotting the per-gene dispersion estimates together with the fitted mean-dispersion relationship.
+# png(paste(outdir,"/DEXSeq_DispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
+# plotDispEsts(dxd, xlab = "Mean of normalized counts", ylab = "Dispersion")
+# title(main = "Dispersion Estimates")
+# dev.off()
 
 # Having the dispersion estimates and the size factors, we can now test for differential exon usage. 
 # For each gene, DEXSeq fits a generalized linear model with the formula ~sample + exon + condition:exon 
@@ -161,7 +161,7 @@ dxr <- DEXSeqResults(dxd, independentFiltering=FALSE)
 
 # # MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
 # png(paste(outdir,"/DEXSeq_MAPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-plotMA(dxr, cex=0.8, alpha=0.05)
+# plotMA(dxr, cex=0.8, alpha=0.05)
 # title(main = "MA-plot")
 # dev.off()
 
@@ -175,14 +175,14 @@ colnames(dxr_res)[10] <- "logFC"
 logUp <- which(dxr_res$logFC >= lfcThreshold)
 logDown <- which(dxr_res$logFC <= -lfcThreshold)
 withStat <- which(dxr_res$padj <= adjPValueThreshold)
-colours <- c(noDifference="dimgray", upRegulated="indianred3", downRegulated="mediumseagreen")
+colours <- c(noDifference="dimgray", upRegulated="mediumseagreen", downRegulated="indianred3")
 gene <- rep("noDifference", nrow(dxr_res))
 gene[logUp[logUp %in% withStat]] <- "upRegulated"
 gene[logDown[logDown %in% withStat]] <- "downRegulated"
 ggplot(data.frame(dxr_res), aes(y=logFC, x=exonBaseMean)) + 
       geom_point(size=1.2) + 
-      geom_hline(yintercept = -lfcThreshold, color="mediumseagreen") + 
-      geom_hline(yintercept = lfcThreshold, color="indianred3") +
+      geom_hline(yintercept = -lfcThreshold, color="indianred3") + 
+      geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
       theme_bw() +
       aes(colour=gene) + 
       scale_colour_manual(name="Genes", values=colours) +
