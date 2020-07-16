@@ -275,9 +275,9 @@ class expression_matrix:
 
 	def __init__(self, chosen_samples):
 		if not os.path.exists(expression_analysis_dir): os.makedirs(expression_analysis_dir)
-		# self.genome_perGene_em_featureCounts()
-		self.novel_transcripts_detection_talon(threads)
-		# self.novel_transcripts_detection_flair(threads, chosen_samples)
+		self.genome_perGene_em_featureCounts()
+		self.novel_transcripts_detection_talon()
+		self.novel_transcripts_detection_flair(chosen_samples)
 		return
 
 	def genome_perGene_em_featureCounts(self):
@@ -521,6 +521,7 @@ class expression_matrix:
 		"Rscript",  # Call Rscript
 		"{0}/diffExpr_ExplAnalysis.R".format(rscripts),  # Calling the diffExpr_ExplAnalysis.R script
 		os.path.join(talon_analysis, "filt_talon_abundance.tsv"),  # Input filtered matrix
+		os.path.join(talon_analysis, "prefilt_talon_read_annot.tsv"),  # Read annotation matrix
 		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
 		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
@@ -541,7 +542,7 @@ class expression_matrix:
 		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
 		args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression
 		"2>>", os.path.join(pipeline_reports, "talon12_dge_analysis-report.txt")])  # Directory where all reports reside
-		# subprocess.run(dge_analysis, shell=True)
+		subprocess.run(dge_analysis, shell=True)
 		
 		### Thirteenth step: DTE
 		print("{0}  13/ TALON - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
@@ -549,6 +550,7 @@ class expression_matrix:
 		"Rscript",  # Call Rscript
 		"{0}/diffExpr_DTE.R".format(rscripts),  # Calling the diffExpr_DTE.R script
 		os.path.join(talon_analysis, "filt_talon_abundance.tsv"),  # Input filtered matrix
+		os.path.join(talon_analysis, "prefilt_talon_read_annot.tsv"),  # Read annotation matrix
 		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
 		args.minSampsFeatureExpr,  # minSampsFeatureExpr -  A transcript must be mapped to an isoform at least this minimum number of samples for the gene isoform to be considered
@@ -752,7 +754,7 @@ class expression_matrix:
 
 class special_analysis:
 
-	def __init__(self, threads):
+	def __init__(self):
 		self.polyA_length_est_analysis()
 		# self.methylation_detection()
 		return
@@ -784,7 +786,7 @@ class special_analysis:
 								gene_out.write("{0}\n".format(line.strip()))
 							else:
 								readname = line.strip().split("\t")[0]
-								contig = "NNNN0000{1}.{1}".format(line.strip().split("\t")[1], i)
+								contig = "NNNN0000{1}".format(line.strip().split("\t")[1], i)
 								transcript_id = read_annot_dict[(sample ,readname)][0] if (sample ,readname) in read_annot_dict else contig
 								gene_id = read_annot_dict[(sample ,readname)][1] if (sample ,readname) in read_annot_dict else contig
 								rest = "\t".join(line.strip().split("\t")[2:])
@@ -797,11 +799,11 @@ class special_analysis:
 						fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
 					# nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
 					
-					# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
-					sample_info_genes = "{0}/polyA_gene_info.csv".format(polyA_analysis_dir)
-					with open(sample_info_genes, "a") as fout_gene:
-						fout_gene.write("{0},{1},{2}/{0}/{0}.polya_results.genes.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
-					# nanotail_analysis(sample_info_genes, "gene")  # Gene  level analysis
+					# # Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
+					# sample_info_genes = "{0}/polyA_gene_info.csv".format(polyA_analysis_dir)
+					# with open(sample_info_genes, "a") as fout_gene:
+					# 	fout_gene.write("{0},{1},{2}/{0}/{0}.polya_results.genes.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
+					# # nanotail_analysis(sample_info_genes, "gene")  # Gene  level analysis
 		return
 
 	def nanotail_analysis(self, sample_info, what):
@@ -953,9 +955,9 @@ def main():
 			
 		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
-	expression_matrix(args.threads, chosen_samples)
+	expression_matrix(chosen_samples)
 
-	# special_analysis(args.threads)
+	special_analysis()
 
 	# summary()
 
