@@ -46,12 +46,11 @@ num <- length(unique(expr_file$Category))
 colors <- c('#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
             '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', 
             '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', 
-            '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080',
-            '#ffffff', '#000000')
+            '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080')
 
 # ggplot 
 p <- ggplot(mtx, aes(x = variable  , y = value, fill = factor(Category, levels=expr_file$Category))) +
-     geom_bar(stat = "identity", position = "stack", width = 0.3) +
+     geom_bar(stat = "identity", position = "stack", width = 0.5) +
      theme_bw() +
      scale_fill_manual("", values = colorRampPalette(colors)(num)) +
      scale_y_continuous(labels = scales::percent) +
