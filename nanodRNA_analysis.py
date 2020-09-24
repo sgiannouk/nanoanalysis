@@ -1,6 +1,6 @@
 ###Stavros Giannoukakos### 
 #Version of the program
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 import argparse
 import subprocess
@@ -32,7 +32,7 @@ description = "DESCRIPTION"
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, usage=usage, description=description, epilog=epilog)
 # Number of threads/CPUs to be used
-parser.add_argument('-t', '--threads', dest='threads', default=str(40), metavar='', 
+parser.add_argument('-t', '--threads', dest='threads', default=str(35), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Genes expressed in minimum this many samples
 parser.add_argument('-msge', '--minSampsGeneExpr', dest='minSampsGeneExpr', default=str(3), metavar='', 
@@ -275,12 +275,12 @@ class expression_matrix:
 
 	def __init__(self, chosen_samples):
 		if not os.path.exists(expression_analysis_dir): os.makedirs(expression_analysis_dir)
-		self.genome_perGene_em_featureCounts()
-		self.novel_transcripts_detection_talon()
+		self.genome_GeneLevel_featureCounts()
+		self.genome_TranscriptLevel_talon(len(chosen_samples))
 		# self.novel_transcripts_detection_flair(chosen_samples)
 		return
 
-	def genome_perGene_em_featureCounts(self):
+	def genome_GeneLevel_featureCounts(self):
 		print("\n\t{0} GENERATING THE PER-GENE EXPRESSION MATRIX".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
 
 		featureCounts_analysis = os.path.join(expression_analysis_dir, 'featureCounts_analysis')
@@ -360,7 +360,7 @@ class expression_matrix:
 		os.system('rm {0}/featureCounts_expression_perGene_matrix.txt {0}/genome_alignments_perGene_sum.tab'.format(featureCounts_analysis))
 		return
 
-	def novel_transcripts_detection_talon(self):
+	def genome_TranscriptLevel_talon(self, num_of_samples):
 		""" TALON takes transcripts from one or more long read datasets (SAM format) 
 		and assigns them transcript and gene identifiers based on a database-bound
 		annotation. Novel events are assigned new identifiers """
@@ -370,6 +370,7 @@ class expression_matrix:
 		if not os.path.exists(temp): os.makedirs(temp)
 		R_analysis = os.path.join(talon_analysis, "R_analysis")
 		if not os.path.exists(R_analysis): os.makedirs(R_analysis)
+
 
 		# Create config file that is needed for talon and converting the aligned bam files to sam
 		csv_file = os.path.join(talon_analysis,'talon_input.csv')
@@ -470,9 +471,9 @@ class expression_matrix:
 		"talon_filter_transcripts",  # Call talon_filter_transcripts
 		"--db", talon_database,  # TALON database
 		"--annot", talon_database[:-3],  # Which annotation version to use
-		"--minCount 1",  # Number of minimum occurrences required for a novel transcript PER dataset
+		"--minCount 8",  # Number of minimum occurrences required for a novel transcript PER dataset
 		"--maxFracA 0.5",  # All of the supporting reads must have 50% or fewer As in the 20 bp interval after alignment
-		"--minDatasets 1",  # Minimum number of datasets novel transcripts must be found in
+		f"--minDatasets {int(round(num_of_samples/2))}",  # Minimum number of datasets novel transcripts must be found in 
 		"--o", os.path.join(talon_analysis, "filtered_isoforms.csv"),  # Output
 		"2>>", os.path.join(pipeline_reports, "talon7_talon_filter-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_filter, shell=True)
@@ -953,15 +954,15 @@ def main():
 		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
 
 
-		quality_control(sum_file, sample_id, raw_data_dir)
+		# quality_control(sum_file, sample_id, raw_data_dir)
 
-		alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 			
-		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+		polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
 	expression_matrix(chosen_samples)
 
-	# special_analysis()
+	special_analysis()
 
 	summary()
 
