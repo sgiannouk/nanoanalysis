@@ -3,30 +3,27 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 6) {
+if (length(args) == 5) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
-  # Read annotation file
-  read_annot <- args[2]
   # CSV file used for running TALON
-  input_groups <- args[3]
+  input_groups <- args[2]
   # Output direcotry where all stats will be saves
-  main_outdir <- args[4]
+  main_outdir <- args[3]
   # Minimum gene counts
-  minGeneExpr <- as.numeric(args[5])
+  minGeneExpr <- as.numeric(args[4])
   # Top N genes to be used for the heatmap
-  n_top <- as.numeric(args[6])
+  n_top <- as.numeric(args[5])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/filt_talon_abundance.tsv"
-# read_annot <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/prefilt_talon_read_annot.tsv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/diffExpr_analysis"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_abundance.tsv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
 # minGeneExpr <- 10  # Minimum gene counts
-# n_top <- 50
+# n_top <- 100
 
 
 library("readr")
@@ -35,7 +32,6 @@ library("dplyr")
 library("plotly")
 library("DESeq2")
 library("ggplot2")
-library("DRIMSeq")
 library("heatmaply")
 library("RColorBrewer")
 
@@ -52,7 +48,7 @@ dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 
 # Input the filtered expression matrix
-expr_file <- read.csv(matrix)
+expr_file <- read.delim(matrix)
 
 # Reading input csv file containing the groups
 groups <- read.csv(input_groups, header=F)[ ,1:3]
@@ -60,7 +56,7 @@ groups <- groups[order(groups$V2), ] # Order data frame
 
 sampletypevalues <- factor(unique(groups$V2)) # Obtaining the sample groups
 
-matfile <- expr_file[ ,c(1,10:length(expr_file))]  # Obtaining only the annot_gene_id and the counts
+matfile <- expr_file[ ,c(3,12:length(expr_file))]  # Obtaining only the annot_gene_id and the counts
 
 # Summarising all reads per gene name and removing the duplicate  rows
 matfile <- data.frame(dplyr::group_by(matfile, annot_gene_id) %>% dplyr::summarise_all(sum))
@@ -171,10 +167,10 @@ if (length(groups) <= 100) {
   heatmaply(top_genes, file = paste(outdir,"/explAnalysis_heatmap.html",sep =""),
             limits = NULL, colors = brewer.pal(11,"Spectral"), scale = "row", main = heatmap_title,
             key.title=NULL, col_side_colors = data.frame(groups), hide_colorbar = FALSE,
-            column_text_angle=60, fontsize_col = 9, fontsize_row = 8,  showticklabels=c(TRUE,TRUE))
+            column_text_angle=35, fontsize_col = 9, fontsize_row = 8,  showticklabels=c(TRUE,TRUE))
   heat_map <- heatmaply(top_genes, limits = NULL, colors = brewer.pal(11,"Spectral"), scale = "row",
                         main = heatmap_title, key.title=NULL, col_side_colors = data.frame(groups),
-                        hide_colorbar = FALSE, column_text_angle=60, fontsize_col = 9, fontsize_row = 8,
+                        hide_colorbar = FALSE, column_text_angle=35, fontsize_col = 9, fontsize_row = 8,
                         showticklabels=c(TRUE,TRUE))
 } else {
   # Heatmap of top selected genes, No sample-names
@@ -191,74 +187,3 @@ if (length(groups) <= 100) {
 plotly_IMAGE(heat_map, width = 1200, height = 800, format = "png", out_file = paste(outdir,"/explAnalysis_heatmap.png",sep =""))
 rm(counts.keep, heat_map, highly_variable_lcpm, logcounts, myCPM, thresh, top_genes, y, col_condition, heatmap_title, keep, 
    n_top, select_var, var_genes, check.integer)
-
-
-### Checking number of  transcripts per condition
-# Obtaining the counts table
-matfile <- expr_file[ ,c(2,1,10:length(expr_file))]  # Obtaining only the annot_gene_id and the counts
-colnames(matfile)[1:2] <- c("feature_id","gene_id")
-
-group_samples <- data.frame(sample_id = groups$Samples, condition = groups$Groups)
-
-# Create a dmDSdata object that is the starting point of DRIMSeq
-drimseq <- dmDSdata(counts = matfile, samples = group_samples)
-
-# Filtering of lowly expressed genes
-# The parameters are the suggested by ONT
-drimseq <- dmFilter(drimseq, 
-                    #min_samps_gene_expr = minSampsGeneExpr, 
-                    min_gene_expr = minGeneExpr)
-
-# Obtaining the counts after dmFiltering
-filtered_counts <- counts(drimseq)
-
-# Selecting the samples from the first group
-selected_group1 <- cbind(filtered_counts[,c(1,2)], filtered_counts[ ,which(colnames(filtered_counts) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[1]])])
-# Removing unexpressed genes in this group (genes with 0 in all samples)
-selected_group1 <- selected_group1[rowSums(selected_group1[ ,which(colnames(selected_group1) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[1]])]) > 0, ] 
-# Transform to count table
-selected_group1 <- data.frame(table(selected_group1$gene_id))
-# Collapsing and counting transcripts
-selected_group1 <- data.frame(table(selected_group1$Freq))
-selected_group1$group <- as.character(sampletypevalues[1])  # Renaming all genes to samplegroup
-
-# Selecting the samples from the second group
-selected_group2 <- cbind(filtered_counts[,c(1,2)], filtered_counts[ ,which(colnames(filtered_counts) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[2]])])
-# Removing unexpressed genes in this group (genes with 0 in all samples)
-selected_group2 <- selected_group2[rowSums(selected_group2[ ,which(colnames(selected_group2) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[2]])]) > 0, ]
-# Transform to count table
-selected_group2 <- data.frame(table(selected_group2$gene_id))
-# Collapsing and counting transcripts
-selected_group2 <- data.frame(table(selected_group2$Freq))
-selected_group2$group <- as.character(sampletypevalues[2])  # Renaming all genes to samplegroup
-
-# Merging the melted data frames
-merged_melted_tables <- rbind(selected_group1, selected_group2)
-write.table(merged_melted_tables, file=paste(outdir,"/table_of_NumofTrPerCondition.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-rm(selected_group1, selected_group2)
-
-ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) + 
-      geom_bar(stat = "identity", position = "dodge") +
-      scale_fill_manual("Groups", values = c("#66CC99", "#877598")) +
-      theme_bw() +
-      theme(legend.position="bottom") +
-      theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-      labs(title="Number of isoform usage per condition", x="Number of transcprits", y="Frequency") +
-ggsave(file=paste(outdir, "/explAnalysis_TrNumPerCondition.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-
-
-# Input annotation file 
-annot <- read_tsv(read_annot, col_names=TRUE)
-# Ordering the matrix based on the transcript length
-annot <- annot[order(annot$read_length, decreasing = TRUE), ]
-# Obtaining the top 100 reads based on length
-annot_subset <- annot[c(1:100), ]
-# Outputing the table
-write.table(annot_subset, file=paste(outdir,"/top100_readLength.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-# Plot
-ggplot(annot, aes(x=read_length)) + 
-       geom_histogram(bins = 1000) + 
-       labs(title="Pre filtered read length distribution", x="Read length", y="Frequency") +
-       theme_bw()
-ggsave(file=paste(outdir, "/explAnalysis_readLengthDistribution.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-

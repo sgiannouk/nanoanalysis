@@ -3,44 +3,32 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 10) {
+if (length(args) == 7) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
   # CSV file used for running TALON
   input_groups <- args[2]
   # Output direcotry where all stats will be saves
   main_outdir <- args[3]
-  # A transcript must be mapped to a gene in at least this minimum
-  # number of samples for the gene be included in the analysis
-  minSampsGeneExpr <- as.numeric(args[4])
-  # A transcript must be mapped to an isoform at least this minimum
-  # number of samples for the gene isoform to be included in the analysis
-  minSampsFeatureExpr <- as.numeric(args[5])
-  # Minimum number of total mapped sequence reads 
-  # for a gene to be considered expressed
-  minGeneExpr <- as.numeric(args[6])
   # Minimum number of total mapped sequence reads 
   # for a gene isoform to be considered
-  minFeatureExpr <- as.numeric(args[7])
+  minFeatureExpr <- as.numeric(args[4])
   # Adjusted p-value threshold for differential expression analysis
-  adjPValueThreshold <- as.numeric(args[8])
+  adjPValueThreshold <- as.numeric(args[5])
   # Minimum required log2 fold change for differential expression analysis
-  lfcThreshold <- as.numeric(args[9])
+  lfcThreshold <- as.numeric(args[6])
   # Number of cores to be used for the differential expression analysis
-  threads <- as.numeric(args[10])
+  threads <- as.numeric(args[7])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/filt_talon_abundance.tsv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/diffExpr_analysis"
-# minSampsGeneExpr <- 3  # Genes expressed in minimum this many samples
-# minSampsFeatureExpr <- 1  # Transcripts expressed in minimum this many samples
-# minGeneExpr <- 10  # Minimum gene counts
-# minFeatureExpr <- 3  # Minimum transcript counts
-# adjPValueThreshold <- 0.05
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filt_talon_abundance.csv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
+# minFeatureExpr <- 10  # Minimum feature counts
+# adjPValueThreshold <- 0.01
 # lfcThreshold <- 1
 # threads <- 2
 
@@ -98,34 +86,30 @@ print(table((DRIMSeq::samples(drimseq))$condition))
 # Filtering of lowly expressed transcript
 # The parameters are the suggested by ONT
 drimseq <- dmFilter(drimseq, 
-                    min_samps_gene_expr = minSampsGeneExpr, 
-                    min_samps_feature_expr = minSampsFeatureExpr,
-                    min_gene_expr = minGeneExpr, 
+                    min_samps_feature_expr = 1,
                     min_feature_expr = minFeatureExpr)
 
 # Obtaining the counts after dmFiltering
 filtered_counts <- counts(drimseq)
 
-# Printing several stats
-out = nrow(matfile)  - length(drimseq)
-tot = nrow(matfile)
-perc = round((out/tot) * 100, 1)
-print(paste("In total ", out,
-            " out of ", tot,  
-            " (", perc, "%)"," transcripts did not pass the minimum thersholds", sep=""))
-print(paste("We are continuing the analysis with ", length(unique(filtered_counts$feature_id))," transcripts and ", length(unique(filtered_counts$gene_id))," genes",sep=""))
+# Printing stats
+print(paste("In total ", length(unique(filtered_counts$gene_id)), 
+            " out of ", length(unique(matfile$gene_id))," genes passed the min. thresholds.",sep=""))
+print(paste("In total ", length(unique(filtered_counts$feature_id)), 
+            " out of ", length(unique(matfile$feature_id))," genes passed the min. thresholds.",sep=""))
 
 # Creating with design matrix
 if (length(unique(group_samples$batch) == 1)) {
   design <- model.matrix( ~ condition, data = DRIMSeq::samples(drimseq))
 } else {
   design <- model.matrix( ~ condition + batch, data = DRIMSeq::samples(drimseq)) }
-rm(n, threads, main_outdir, out, tot, perc, minSampsGeneExpr, minSampsFeatureExpr, minGeneExpr, minFeatureExpr,  matfile)
+rm(n, threads, main_outdir, minFeatureExpr, matfile)
 
 
 ### Differential transcript usage using DEXSeq ###
 sample.data<-DRIMSeq::samples(drimseq)  # Reformating and obtaining the metadata
 row.names(sample.data) <- sample.data$sample_id; sample.data$sample_id <- NULL
+sample.data$condition <- factor(sample.data$condition)
 count.data <- data.frame(counts(drimseq)[,-c(1:2)])  # Obtaining the read counts of the filtered data frame
 
 # Constructing the DEXSeqDataSet object that will store our data
@@ -141,12 +125,6 @@ dxd <- estimateSizeFactors(dxd)
 # Estimating the variability of the data, in order to test for differential exon usage
 dxd <- estimateDispersions(dxd, BPPARAM=BPPARAM)
 rm(sample.data, count.data)
-
-# # Plotting the per-gene dispersion estimates together with the fitted mean-dispersion relationship.
-# png(paste(outdir,"/DEXSeq_DispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-# plotDispEsts(dxd, xlab = "Mean of normalized counts", ylab = "Dispersion")
-# title(main = "Dispersion Estimates")
-# dev.off()
 
 # Having the dispersion estimates and the size factors, we can now test for differential exon usage. 
 # For each gene, DEXSeq fits a generalized linear model with the formula ~sample + exon + condition:exon 
@@ -165,31 +143,31 @@ dxr <- DEXSeqResults(dxd, independentFiltering=FALSE)
 # title(main = "MA-plot")
 # dev.off()
 
-# Obtzining the DEXSeq results
+# Optimising the DEXSeq results
 dxr_res <- data.frame(dxr)
 # Renaming the log2FC
 colnames(dxr_res)[10] <- "logFC"
 
 
-# MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
-logUp <- which(dxr_res$logFC >= lfcThreshold)
-logDown <- which(dxr_res$logFC <= -lfcThreshold)
-withStat <- which(dxr_res$padj <= adjPValueThreshold)
-colours <- c(noDifference="dimgray", upRegulated="mediumseagreen", downRegulated="indianred3")
-gene <- rep("noDifference", nrow(dxr_res))
-gene[logUp[logUp %in% withStat]] <- "upRegulated"
-gene[logDown[logDown %in% withStat]] <- "downRegulated"
-ggplot(data.frame(dxr_res), aes(y=logFC, x=exonBaseMean)) + 
-      geom_point(size=1.2) + 
-      geom_hline(yintercept = -lfcThreshold, color="indianred3") + 
-      geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
-      theme_bw() +
-      aes(colour=gene) + 
-      scale_colour_manual(name="Genes", values=colours) +
-      xlab("log(CountsPerMillion)") +
-      ylab("log(FoldChange)") +
-      ggtitle("MA plot - log(FC) vs. log(CPM) on gene level data")
-ggsave(file=paste(outdir,"/DEXSeq_MAplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+# # MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
+# logUp <- which(dxr_res$logFC >= lfcThreshold)
+# logDown <- which(dxr_res$logFC <= -lfcThreshold)
+# withStat <- which(dxr_res$padj <= adjPValueThreshold)
+# colours <- c(noDifference="dimgray", upRegulated="mediumseagreen", downRegulated="indianred3")
+# gene <- rep("noDifference", nrow(dxr_res))
+# gene[logUp[logUp %in% withStat]] <- "upRegulated"
+# gene[logDown[logDown %in% withStat]] <- "downRegulated"
+# ggplot(data.frame(dxr_res), aes(y=logFC, x=exonBaseMean)) + 
+#       geom_point(size=1.2) + 
+#       geom_hline(yintercept = -lfcThreshold, color="indianred3") + 
+#       geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
+#       theme_bw() +
+#       aes(colour=gene) + 
+#       scale_colour_manual(name="Genes", values=colours) +
+#       xlab("log(CountsPerMillion)") +
+#       ylab("log(FoldChange)") +
+#       ggtitle("MA plot - log(FC) vs. log(CPM) on gene level data")
+# ggsave(file=paste(outdir,"/DEXSeq_MAplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 
 
 ### StageR analysis on the DEXSeq differential transcript usage results ###
@@ -230,7 +208,6 @@ idx <- length(dexseq_results)
 dexseq_results <- dexseq_results[ ,c(1, 2, num+3, num+4, 3:(2+num), (idx-4):idx)]
 # Renaming
 colnames(dexseq_results)[2] <- "transcript_id"
-# rm(num, idx, pConfirmation, padj, tx2gene,BPPARAM, pScreen)
 
 dexseq_results <- dexseq_results[order(dexseq_results$padj_gene), ]
 # Exporting the normalised results table containing all features along with the output stats  from DEXSeq and stageR
@@ -262,8 +239,8 @@ for(gene in unique(dexseq_results_filt$gene_name)){
     ggplot(gdf, aes(x=transcript_name, y=norm_count)) + 
            geom_boxplot(aes(fill=Groups), position="dodge") + 
            geom_dotplot(binaxis="y", stackdir="center", dotsize=0.6, aes(fill=Groups), position="dodge") + 
-           theme(axis.text.x = element_text(angle = 35, hjust = 1)) +
            theme_bw() +
            scale_fill_brewer(palette="Paired") +
+           theme(axis.text.x = element_text(angle = 30,hjust=1)) +
            labs(title=paste("Boxplots showing transcript expression\nlevels across conditions for gene", gene), x="DTUs", y="Transcript read count")
 ggsave(file=paste(outdir,"/DEXSeqStageR_DTU_", gene, ".png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)}

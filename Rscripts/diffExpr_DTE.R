@@ -3,7 +3,7 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 8) {
+if (length(args) == 7) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
   # Read annotation file
@@ -12,26 +12,23 @@ if (length(args) == 8) {
   input_groups <- args[3]
   # Output direcotry where all stats will be saves
   main_outdir <- args[4]
-  # Transcripts expressed in minimum this many samples
-  minSampsFeatureExpr <- as.numeric(args[5])
   # Minimum transcript counts
-  minFeatureExpr <- as.numeric(args[6])
+  minFeatureExpr <- as.numeric(args[5])
   # Adjusted p-value threshold for differential expression analysis
-  adjPValueThreshold <- as.numeric(args[7])
+  adjPValueThreshold <- as.numeric(args[6])
   # Minimum required log2 fold change for differential expression analysis
-  lfcThreshold <- as.numeric(args[8])
+  lfcThreshold <- as.numeric(args[7])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/filt_talon_abundance.tsv"
-# read_annot <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/prefilt_talon_read_annot.tsv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation/diffExpr_analysis"
-# minSampsFeatureExpr <- 2  # Transcripts expressed in minimum this many samples
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filt_talon_abundance.csv"
+# read_annot <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_read_annot.tsv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
 # minFeatureExpr <- 10  # Minimum transcript counts
-# adjPValueThreshold <- 0.05
+# adjPValueThreshold <- 0.01
 # lfcThreshold <- 1
 
 
@@ -41,6 +38,7 @@ library("edgeR")
 library("DRIMSeq")
 library("ggplot2")
 library("reshape")
+options(scipen = 999)
 
 
 
@@ -52,9 +50,9 @@ dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 
 # Input the filtered expression matrix
-expr_file <- read.csv(matrix)
+expr_file <- read.csv(matrix, header=T)
 # Exporting the unfiltered table
-write.table(expr_file, file=paste(outdir,"/edgeR_prefiltered_table.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+write.table(expr_file, file=paste(outdir,"/edgeR_filtered_table.tsv", sep=""), sep="\t", row.names = F, quote=FALSE)
 
 print(paste("Total number of unique trancripts:", length(unique(expr_file$annot_transcript_id)), sep=" " ))
 
@@ -88,7 +86,7 @@ print(table((DRIMSeq::samples(drimseq))$condition))
 # Filtering of lowly expressed transcript
 # The parameters are the suggested by ONT
 drimseq <- dmFilter(drimseq, 
-                    min_samps_feature_expr = minSampsFeatureExpr,
+                    min_samps_feature_expr = 1,
                     min_feature_expr = minFeatureExpr)
 
 
@@ -96,21 +94,15 @@ drimseq <- dmFilter(drimseq,
 filtered_counts <- counts(drimseq)
 
 # Printing several stats
-out = nrow(matfile)  - length(drimseq)
-tot = nrow(matfile)
-perc = round((out/tot) * 100, 1)
-print(paste("In total ", out,
-            " out of ", tot,  
-            " (", perc, "%)"," transcripts did not pass the minimum thersholds", sep=""))
-print(paste("We are continuing the analysis with ", length(unique(filtered_counts$feature_id))," transcripts",sep=""))
+# Printing stats
+print(paste("In total ", length(unique(filtered_counts$feature_id)), 
+            " out of ", length(unique(matfile$feature_id))," genes passed the min. thresholds.",sep=""))
 
 # Creating with design matrix
 if (length(unique(group_samples$batch) == 1)) {
   design <- model.matrix( ~ condition, data = DRIMSeq::samples(drimseq))
 } else {
   design <- model.matrix( ~ condition + batch, data = DRIMSeq::samples(drimseq)) }
-rm(n, out, tot, perc, minSampsFeatureExpr, minFeatureExpr, matfile)
-
 
 
 # Removing gene_id column
@@ -179,12 +171,6 @@ results_selected <- results_selected[with(results_selected, order(pval, padj)), 
 # Exporting the normalised results table containing the selected features with log2FoldChange greater than 1 and adjusted p value lower than the user-input value
 write.table(results_selected, file=paste(outdir,"/",sampletypevalues[1],"VS",sampletypevalues[2],"_edgeR_topTranscriptsBelow", gsub("[.]", "", adjPValueThreshold), "LFC", gsub("[.]", "", lfcThreshold), ".csv", sep=""), sep="\t", row.names = F, quote=FALSE)
 
-
-# # Plotting log-fold change against log-counts per million, with DE transcripts highlighted
-# png(paste(outdir,"/edgeR_MDPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-# plotMD(qlf)
-# abline(h=c(-lfcThreshold, lfcThreshold), col="blue")
-# dev.off()
 
 
 # MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
@@ -264,7 +250,7 @@ text(edger_res_overall$logFC[gn.selected], edger_res_overall$significant[gn.sele
 dev.off()
 rm(genes.to.plot, cols, gn.selected)
 edger_res_overall$significant <- NULL; edger_res_overall$pch  <- NULL; edger_res_overall$transcript_name <- NULL
-rm(is.de,  fit, qlf, transcript_filt_counts, edger_res)
+rm(is.de,  fit, qlf, transcript_filt_counts, edger_res, edger_res_overall, edgeR_table, results_selected, design)
 
 
 ### TOP 30 DE TRANSCRIPTS
@@ -292,86 +278,31 @@ ggsave(file=paste(outdir,"/edgeR_top30MostSingificantTranscripts.png",sep=""), w
 rm(melt_top30_sigNorm, top30_sigNorm)
 
 
-### PLOTTING THE READ LENGTH DISTRIBUTION OF THE FILTERED/SIGN TRANSCRIPTOME ###
-# Input annotation file 
-annot <- read_tsv(read_annot, col_names=TRUE)
-# Obtaining the transcript_id of the filtered data
-transcripts <- as.vector(total_results$transcript_id)
-annot <- subset(annot, annot_transcript_id %in% transcripts)
-# Outputting the table
-write.table(annot, file=paste(outdir,"/lengthDistribution_filtTranscripts.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-# Plot
-ggplot(annot, aes(x=read_length)) + 
-  geom_histogram(bins = 500) + 
-  labs(title="Read length distribution of filtered transcripts", x="Read length", y="Frequency") +
-  theme_bw() + 
-  scale_x_continuous(breaks=seq(0, max(annot$read_length), 500))
-ggsave(file=paste(outdir, "/lengthDistribution_filtTranscripts.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-
-# Obtaining the transcript_id of the significant transcripts
-transcripts <- as.vector(results_selected$transcript_id)
-annot <- subset(annot, annot_transcript_id %in% transcripts)
-# Outputting the table
-write.table(annot, file=paste(outdir,"/lengthDistribution_signTranscripts.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-# Plot
-ggplot(annot, aes(x=read_length)) + 
-  geom_histogram(bins = 200) + 
-  labs(title="Read length distribution of significant transcripts", x="Read length", y="Frequency") +
-  theme_bw() + 
-  scale_x_continuous(breaks=seq(0, max(annot$read_length), 500))
-ggsave(file=paste(outdir, "/lengthDistribution_signTranscripts.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-
-
-
-# ########### Gene Set Enrichment Analysis with ClusterProfiler ########### 
-# library("clusterProfiler")
-# library("enrichplot")
-# library("DOSE")
-# set.seed("12345")
+# ### PLOTTING THE READ LENGTH DISTRIBUTION OF THE FILTERED/SIGN TRANSCRIPTOME ###
+# # Input annotation file 
+# annot <- read_tsv(read_annot, col_names=TRUE)
+# # Obtaining the transcript_id of the filtered data
+# transcripts <- as.vector(total_results$transcript_id)
+# annot <- subset(annot, annot_transcript_id %in% transcripts)
+# # Outputting the table
+# write.table(annot, file=paste(outdir,"/lengthDistribution_filtTranscripts.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+# # Plot
+# ggplot(annot, aes(x=read_length)) + 
+#   geom_histogram(bins = 500) + 
+#   labs(title="Read length distribution of filtered transcripts", x="Read length", y="Frequency") +
+#   theme_bw() + 
+#   scale_x_continuous(breaks=seq(0, max(annot$read_length), 500))
+# ggsave(file=paste(outdir, "/lengthDistribution_filtTranscripts.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 # 
-# 
-# # Setting the desired  organism
-# organism = "org.Hs.eg.db"
-# # BiocManager::install("org.Hs.eg.db", character.only = TRUE)
-# library(organism, character.only = TRUE)
-# 
-# # Obtaining the log2 fold change 
-# original_gene_list <- total_results$log2FoldChange
-# # Naming the vector
-# names(original_gene_list) <- sub("\\..*", "", total_results$transcript_id)
-# # Omitting any NA values 
-# gene_list<- na.omit(original_gene_list)
-# # Sort the list in decreasing order (required for clusterProfiler)
-# gene_list = sort(gene_list, decreasing = TRUE)
-# 
-# # Gene Set Enrichment
-# gse <- gseGO(geneList=gene_list, 
-#              ont ="ALL", 
-#              keyType = "ENSEMBL", 
-#              nPerm = 10000, 
-#              minGSSize = 3, 
-#              maxGSSize = 800, 
-#              pvalueCutoff =  adjPValueThreshold, 
-#              verbose = TRUE, 
-#              OrgDb = organism, 
-#              pAdjustMethod = "none")
-# 
-# dotplot(gse, showCategory=20, split=".sign") + facet_grid(.~.sign)
-# ggsave(file=paste(outdir,"/clusterProfiler_dotPlot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-# 
-# # Enrichment map organizes enriched terms into a network with edges connecting overlapping gene sets. 
-# # In this way, mutually overlapping gene sets are tend to cluster together, making it easy to identify 
-# # functional modules.
-# emapplot(gse, showCategory = 20)
-# ggsave(file=paste(outdir,"/clusterProfiler_enrichmentMap.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-# 
-# # The cnetplot depicts the linkages of genes and biological concepts (e.g. GO terms or KEGG pathways)
-# # as a network (helpful to see which genes are involved in enriched pathways and genes that may belong
-# # to multiple annotation categories).
-# # cnetplot(gse, categorySize="pvalue", foldChange=gene_list, showCategory = 3)
-# # ggsave(file=paste(outdir,"/clusterProfiler_categoryNetplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-# 
-# # Grouped by gene set, density plots are generated by using the frequency of fold change values per gene
-# # within each set. Helpful to interpret up/down-regulated pathways.
-# ridgeplot(gse) + labs(x = "enrichment distribution")
-# ggsave(file=paste(outdir,"/clusterProfiler_ridgeplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+# # Obtaining the transcript_id of the significant transcripts
+# transcripts <- as.vector(results_selected$transcript_id)
+# annot <- subset(annot, annot_transcript_id %in% transcripts)
+# # Outputting the table
+# write.table(annot, file=paste(outdir,"/lengthDistribution_signTranscripts.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+# # Plot
+# ggplot(annot, aes(x=read_length)) + 
+#       geom_histogram(bins = 200) + 
+#       labs(title="Read length distribution of significant transcripts", x="Read length", y="Frequency") +
+#       theme_bw() + 
+#       scale_x_continuous(breaks=seq(0, max(annot$read_length), 500))
+# ggsave(file=paste(outdir, "/lengthDistribution_signTranscripts.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)

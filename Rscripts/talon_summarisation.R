@@ -16,8 +16,8 @@ if (length(args) == 4) {
   quit()
 }
 
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2"
 # matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_abundance.tsv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2"
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
 # filt_data <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filtered_isoforms.csv"
 
@@ -29,6 +29,7 @@ library("formattable")
 library("ggpubr")
 options(scipen = 999)
 theme_set(theme_pubr())
+
 
 outdir <- file.path(main_outdir, "summary_reports")
 dir.create(outdir, showWarnings = FALSE)
@@ -51,12 +52,11 @@ print(paste("Total number of remaining transcripts:", filtered_transcripts, sep=
 
 # Obtaining the important annotation to export the stats 
 filt_table_overview  <- filtered_table[ ,3:11]
-# Output the overview stats
-# write.csv(filt_table_overview, file=paste(outdir,"talon_filtered_isoforms.csv",sep="/"), quote=F, row.names=F)
 # Output the filtered expression matrix
 filtered_matrix <- filtered_table[ ,3:length(filtered_table)]
-write.csv(filtered_matrix, file=paste(dirname(outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
+write.csv(filtered_matrix, file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
 rm(expr_file, matrix, filtered_matrix, iso_to_remain)
+
 
 ################## OVERALL ANALYSIS ################## 
 # Extracting basic stats
@@ -109,7 +109,7 @@ p1 <- ggplot(general_table_sub, aes(x = Attributes, y = Remarks, fill = Attribut
   scale_fill_manual("", values = legend_colors) +
   theme_bw() +
   theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "None") +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "None") +
   ggtitle("Overall TALON stats")+
   ylab("Percentage of reads (%)") +
   xlab("") 
@@ -120,7 +120,7 @@ p2 <- ggplot(transcript_novelty, aes(x = transcript_novelty, y = n, fill = trans
   geom_text(aes(label=n), position = position_dodge(0.9), vjust = -0.3, size = 3.0, color = "dimgrey") +
   theme_bw() +
   theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "None") +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "None") +
   ggtitle("Overall TALON transcripts novelty")+
   ylab("Reads") +
   xlab("") 
@@ -130,7 +130,7 @@ p3 <- ggplot(gene_novelty, aes(x = gene_novelty, y = n, fill = gene_novelty)) +
   geom_text(aes(label=n), position = position_dodge(0.9), vjust = -0.3, size = 3.0, color = "dimgrey") +
   theme_bw() +
   theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "None") +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "None") +
   ggtitle("Overall TALON gene novelty")+
   ylab("Reads") +
   xlab("") 
@@ -234,7 +234,7 @@ for(i in 1:length(samplegroup)) {
     scale_fill_manual("", values = legend_colors) +
     theme_bw() +
     theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "None") +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "None") +
     ggtitle(paste(group_name, "Overall TALON stats", sep=" "))+
     ylab("Percentage of reads (%)") +
     xlab("") 
@@ -245,7 +245,7 @@ for(i in 1:length(samplegroup)) {
     geom_text(aes(label=n), position = position_dodge(0.9), vjust = -0.3, size = 3.0, color = "dimgrey") +
     theme_bw() +
     theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "None") +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "None") +
     ggtitle(paste(group_name, "Overall TALON transcripts novelty", sep=" "))+
     ylab("Reads") +
     xlab("") 
@@ -255,7 +255,7 @@ for(i in 1:length(samplegroup)) {
     geom_text(aes(label=n), position = position_dodge(0.9), vjust = -0.3, size = 3.0, color = "dimgrey") +
     theme_bw() +
     theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "None") +
+    theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "None") +
     ggtitle(paste(group_name, "Overall TALON gene novelty", sep=" "))+
     ylab("Reads") +
     xlab("") 
