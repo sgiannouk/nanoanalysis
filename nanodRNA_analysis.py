@@ -282,7 +282,7 @@ class expression_analysis:
 
 	def __init__(self):
 		self.talon_analysis()
-		self.talon_visualisation()
+		# self.talon_visualisation()
 		return
 
 	def talon_analysis(self):
@@ -406,25 +406,25 @@ class expression_analysis:
 		"--o", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Output
 		"2>>", os.path.join(pipeline_reports, "talon7_talon_filter-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_filter, shell=True)
-		
+		"""
 		### Eighth step:
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  8/10 TALON - Applying custom filtering of the ISM group based on the polyA estimation: in progress ..')
 		prefit_abundance_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv")
 		prefilt_readannot_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_read_annot.tsv")
 		filtered_isoforms = os.path.join(expression_analysis_dir, "filtered_isoforms.csv")
 		self.polyA_filtering(prefit_abundance_matrix, prefilt_readannot_matrix, filtered_isoforms, filtered_isoforms_final)
-		"""
-		### Ninth step: Applying basic filtering steps and outputting several stats
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing filtered isoforms based on step 8 and exporting basic statsistics: in progress ..')
-		talon_filter_n_report = " ".join([
-		"Rscript",  # Call Rscript
-		f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
-		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
-		R_analysis,  # Output directory
-		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to maintain
-		"2>>", os.path.join(pipeline_reports, "talon9_summarisation.txt")])  # Directory where all reports reside
-		subprocess.run(talon_filter_n_report, shell=True)
+		
+		# ### Ninth step: Applying basic filtering steps and outputting several stats
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing filtered isoforms based on step 8 and exporting basic statsistics: in progress ..')
+		# talon_filter_n_report = " ".join([
+		# "Rscript",  # Call Rscript
+		# f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
+		# os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
+		# R_analysis,  # Output directory
+		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		# os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to maintain
+		# "2>>", os.path.join(pipeline_reports, "talon9_summarisation.txt")])  # Directory where all reports reside
+		# subprocess.run(talon_filter_n_report, shell=True)
 
 		# ### Tenth step: Generating TALON report for each dataset
 		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/10 TALON - Generating TALON report for each dataset: in progress ..')
@@ -451,7 +451,7 @@ class expression_analysis:
 		Here we are using the information of the polyA length estimation to filter 
 		out novel transcripts in the ISM category """
 		
-		
+		not_to_keep = {}
 		filtered_isolist = {}
 		with open(filtered_isoforms) as filtin:
 			for line in filtin:
@@ -473,9 +473,11 @@ class expression_analysis:
 					sample = line.strip().split("\t")[1]
 					transcript_id = line.strip().split("\t")[12]
 					read_type = "{0}_{1}_{2}".format(prefiltered_transcripts[transcript_id],line.strip().split("\t")[16],line.strip().split("\t")[17])
-					if not "ISM_Suffix" in read_type:  # Removing the ISM Suffix group from the downstream analysis. This will be analysed differently
+					if "ISM_Prefix" in read_type:  # Removing the ISM Suffix group from the downstream analysis. This will be analysed differently
 						read_annot_dict[(sample, read)] = (transcript_id, read_type)
-						# print(sample, read, read_annot_dict[(sample, read)])
+					elif "ISM_Suffix" in read_type:
+						not_to_keep[prefiltered_transcripts[transcript_id]] = None
+
 
 		### Iterating through all "polya_results.tsv" obtained from the Nanopolish polyA function 
 		### in order to filter out transcripts in the ISM Prefix group without enough polyA evidence
@@ -490,30 +492,31 @@ class expression_analysis:
 							if not line.startswith("readname"):
 								readname = line.strip().split("\t")[0]
 								if (sample ,readname) in read_annot_dict:
-									transcript_id = read_annot_dict[(sample ,readname)][0] 
+									transcript_name = read_annot_dict[(sample ,readname)][0] 
 									read_type = read_annot_dict[(sample ,readname)][1]
+									if "ISM_Suffix" in read_type:print(read_type)
 									qc = ["OTHER","PASS"][line.strip().split("\t")[-1]=="PASS"]
 									transcript_ID = read_type.split("_")[0]
-									if "ISM_Prefix" in read_type :
-										if (transcript_id, transcript_ID) in filter_dict:
+									if "ISM_Prefix" in read_type:
+										if (transcript_name, transcript_ID) in filter_dict:
 											if qc ==  "PASS":
-												filter_dict[(transcript_id, transcript_ID)][0] += 1
+												filter_dict[(transcript_name, transcript_ID)][0] += 1
 											else:
-												filter_dict[(transcript_id, transcript_ID)][1] += 1
+												filter_dict[(transcript_name, transcript_ID)][1] += 1
 										else:
 											if qc ==  "PASS":
-												filter_dict[(transcript_id, transcript_ID)] = [1,0]
+												filter_dict[(transcript_name, transcript_ID)] = [1,0]
 											else:
-												filter_dict[(transcript_id, transcript_ID)] = [0,1]
-		
+												filter_dict[(transcript_name, transcript_ID)] = [0,1]
+		###621266_ISM_Suffix
 		# for a,b in filter_dict.items():
 		# 	print(a,b)
 
-		not_to_keep = []
-		for transcript_id, qc_tags in filter_dict.items():	# Obtaining the list with the transcripts where the PASS is
+		for transcript, qc_tags in filter_dict.items():	# Obtaining the list with the transcripts where the PASS is
 			if qc_tags[0] < qc_tags[1]:						# less than the rest
-				not_to_keep.append(transcript_id[1])
-
+				not_to_keep[transcript[1]] = None
+		for a, b in not_to_keep.items():
+			print(a)
 		# If not_to_keep list is empty, raise a warning..
 		if len(not_to_keep) == 0: print("WARNING: all ISM transcripts passed the polyA QC filter!")
 
@@ -602,10 +605,10 @@ class downstream_analysis:
 		return
 
 	def polyA_length_est_analysis(self):
-		""" Here is where all the magic of the special filterring is taking place. 
+		""" Here is where all the magic of the special filtering is taking place. 
 		Here we are using the information of the polyA length estimation to filter 
 		out novel transcripts in the ISM category. We are also performing the 
-		differenatial polyadelylation analysis (DPA) """
+		differential polyadelylation analysis (DPA) """
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} POLYA LENGTH ESTIMATION ANALYSIS')
 		
 
