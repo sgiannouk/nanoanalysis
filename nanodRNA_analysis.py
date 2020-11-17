@@ -1,6 +1,6 @@
 ###Stavros Giannoukakos### 
 #Version of the program
-__version__ = "0.2.0"
+__version__ = "v0.2.0"
 
 import glob, os
 import argparse
@@ -28,7 +28,7 @@ description = "DESCRIPTION"
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, usage=usage, description=description, epilog=epilog)
 # Number of threads/CPUs to be used
-parser.add_argument('-t', '--threads', dest='threads', default=str(30), metavar='', 
+parser.add_argument('-t', '--threads', dest='threads', default=str(40), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Minimum gene counts
 parser.add_argument('-mge', '--minGeneExpr', dest='minGeneExpr', default=str(10), metavar='', 
@@ -40,13 +40,13 @@ parser.add_argument('-mfe', '--minFeatureExpr', dest='minFeatureExpr', default=s
 parser.add_argument('-adjpval', '--adjPValueThreshold', dest='adjPValueThreshold', default=str(0.05), metavar='', 
                 	help="Adjusted p-value threshold for differential\nexpression analysis")
 # Minimum required log2 fold change for differential expression analysis
-parser.add_argument('-lfc', '--lfcThreshold', dest='lfcThreshold', default=str(1), metavar='', 
+parser.add_argument('-lfc', '--lfcThreshold', dest='lfcThreshold', default=str(2), metavar='', 
                 	help="Minimum required log2 fold change for diffe-\nrential expression analysis")
 # Top N genes to be used for the heatmap
 parser.add_argument('-n', '--n_top', dest='n_top', default=str(100), metavar='', 
                 	help="Top N genes to be used for the heatmap")
 # Display the version of the pipeline 
-parser.add_argument('-v', '--version', action='version', version='%(prog)s {0}'.format(__version__))
+parser.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}\n{epilog}')
 # Get the options and return them
 args = parser.parse_args()
 
@@ -54,7 +54,7 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 startTime = datetime.now()
 
 # Main folder hosting the analysis
-analysis_dir = os.path.join(script_dir, "analysis")
+analysis_dir = os.path.join(script_dir, "analysis_batch3")
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")
 alignments_dir = os.path.join(analysis_dir, "alignments")
 reports_dir = os.path.join(analysis_dir, "reports")
@@ -71,7 +71,7 @@ if not os.path.exists(pipeline_reports): os.makedirs(pipeline_reports)
 
 def quality_control(seq_summary_file, sample_id, raw_data_dir):
 	# Producing preliminary QC reports 
-	print(f'\t{datetime.now().strftime("%d.%m.%Y %H:%M")} QUALITY CONTROL OF THE INPUT SAMPLES')
+	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} QUALITY CONTROL OF THE INPUT SAMPLES')
 
 
 	if not os.path.exists(initial_qc_reports): os.makedirs(initial_qc_reports)
@@ -105,7 +105,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	"minimap2",  # Call minimap2 (v2.17-r941)
 	"-t", args.threads,  # Number of threds to use
 	"-ax splice",   # Long-read spliced alignment mode and output in SAM format (-a)
-	"-k 14",  # k-mer size
+	"-k 13",  # k-mer size
 	"-uf",  # Find canonical splicing sites GT-AG - f: transcript strand
 	"--secondary=no",  # Do not report any secondary alignments
 	"--MD",  # output the MD tag
@@ -115,7 +115,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	"|" "samtools view",
 	"--threads", args.threads,  # Number of threads to be used by 'samtools view'
 	"-Sb",
-	# "-q 10",  # Filterring out reads with mapping quality lower than 10
+	"-q 10",  # Filterring out reads with mapping quality lower than 10
 	"|", "samtools sort",  # Calling 'samtools sort' to sort the output alignment file
 	"--threads", args.threads,  # Number of threads to be used by 'samtools sort'
 	"-",  # Input from standard output
@@ -261,7 +261,7 @@ def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
 	"2>>", os.path.join(pipeline_reports, "nanopolish_index-report.txt")])
 	subprocess.run(indexing, shell=True)
 
-	# # Nanopolish polyA
+	# Nanopolish polyA
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Nanopolish polyA -  Estimate the polyadenylated tail lengths of {sample_id}: in progress ..')
 	polyA_est = ' '.join([
 	"nanopolish polya",  # Calling nanopolish polya
@@ -272,220 +272,332 @@ def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
 	f"> {polyA_analysis_dir_idv}/{sample_id}.polya_results.tsv",  # Output file
 	"2>>", os.path.join(pipeline_reports, "nanopolish_polyA-report.txt")])
 	subprocess.run(polyA_est, shell=True)
+
+	### Removing unnecessary files
 	subprocess.run(f'rm {extracted_fastq}', shell=True)  # Removing the extracted fastq
+	subprocess.run(f'rm {polyA_analysis_dir}/*/fastq_runid*', shell=True)  # Removing index 
 	return
 
-def expression_analysis():
-	""" TALON takes transcripts from one or more long read datasets (SAM format) 
-	and assigns them transcript and gene identifiers based on a database-bound
-	annotation. Novel events are assigned new identifiers """
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ANNOTATION AND QUANTIFICATION USING TALON')
-	
-
-	talon_analysis = os.path.join(expression_analysis_dir, 'talon_analysis')
-	talon_database = os.path.join(talon_analysis, 'talon_gencode_v35.db')  ### TALON DB
-	temp = os.path.join(talon_analysis, 'transcriptClean_temp')
-	if not os.path.exists(temp): os.makedirs(temp)
-
-	sample_group = []
-	# Create config file that is needed for talon and converting the aligned bam files to sam
-	csv_file = os.path.join(talon_analysis,'talon_input.csv')
-	if not os.path.exists(csv_file) or os.stat(csv_file).st_size == 0:
-		print("{0}  Creating a description file necessary for Talon: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
-		with open(csv_file, "w") as talon_out:
-			for path, subdir, folder in os.walk(alignments_dir):
-				for file in sorted(folder):
-					if file.endswith('.genome.bam'):
-						sample_group.append(file.split(".")[0].split("_")[0])
-						# Output a csv file with 'sample_id, sample_group, technology, input_labeled_sam_file' which is gonna be needed in talon_annotation function
-						talon_out.write('{0},{1},ONT,{2}\n'.format(file.split(".")[0], file.split(".")[0].split("_")[0], os.path.join(temp, file).replace(".genome.bam", ".clean_labeled.sam")))
-						if not os.path.exists(os.path.join(path, file).replace(".bam", ".sam")):
-							print("{0}  Samtools - Converting the genomic bam file ({1}) to sam for Talon: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M"), file))
-							os.system('samtools view -h -@ {0} {1} > {2}'.format(args.threads, os.path.join(path, file), os.path.join(path, file).replace(".bam", ".sam")))
-
-
-	### Initial step: Correcting mismatches, microindels, and noncanonical splice junctions in long reads that have been mapped to the genome
-	sam_files = glob.glob(os.path.join(alignments_dir, "*.genome.sam"))
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1/10 TranscriptClean - Correcting mismatches, microindels, and noncanonical splice junctions in long reads: in progress ..')
-	for file in sam_files:
-		TranscriptClean = " ".join([
-		transcriptclean,  # Call TranscriptClean.py
-		"--sam", file,  # Input sam file
-		"--genome", refGenomeGRCh38_traclean,  # Reference genome fasta file
-		"--threads", args.threads,  # Number of threads to be used by the script
-		"--canonOnly",  # Output only canonical transcripts and transcripts containing annotated noncanonical junctions to the clean SAM file
-		"--spliceJns", sj_ref,  # Splice junction file extracted from the ref. GTF
-		"--deleteTmp",  # the temporary directory (TC_tmp) will be removed
-		"--outprefix", os.path.join(temp, os.path.basename(file).split(".")[0]),  # Outprefix for the outout file
-		"2>>", os.path.join(pipeline_reports, "talon1_transcriptclean-report.txt")])  # Directory where all reports reside
-		subprocess.run(TranscriptClean, shell=True)
-		os.remove(file)
-	
-	### Second step: Building the reference database
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 2/10 TALON - Initiating the database: in progress ..')
-	if os.path.exists(talon_database): os.remove(talon_database)
-	talon_initialize_database = " ".join([
-	"talon_initialize_database",  # Call talon_initialize_database
-	"--f", refAnnot,  # GTF annotation containing genes, transcripts, and edges
-	"--g", 'hg38',  # Genome build (i.e. hg38) to use
-	"--5p 500",  # Maximum allowable distance (bp) at the 5' end during annotation
-	"--3p 300",  # Maximum allowable distance (bp) at the 3' end during annotation
-	"--a", talon_database[:-3],  # Name of supplied annotation
-	"--o", talon_database[:-3],  # Outprefix for the annotation files
-	"2>>", os.path.join(pipeline_reports, "talon2_initialize_database-report.txt")])  # Directory where all reports reside
-	subprocess.run(talon_initialize_database, shell=True)
-
-	### Third step: internal priming check
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/10 TALON - Run talon_label_reads on each file to compute how likely each read is to be an internal priming product: in progress ..')
-	genome_alignments = [sum_file for sum_file in glob.glob(os.path.join(temp, "*clean.sam"))]
-	for file in genome_alignments:
-		talon_priming_check = " ".join([
-		"talon_label_reads",  # Call talon talon_label_reads
-		"--t", args.threads,  # Number of threads to be used by the script
-		"--f", file,  # Input sam file
-		"--g", refGenomeGRCh38,  # Reference genome fasta file
-		"--tmpDir", os.path.join(talon_analysis, "tmp_label_reads"),  # Path to directory for tmp files
-		"--deleteTmp",  # Temporary directory will be removed
-		"--o", os.path.join(temp, os.path.basename(file).replace("_clean.sam",".clean")),  # Prefix for output files
-		"2>>", os.path.join(pipeline_reports, "talon3_talon_priming_check-report.txt")])  # Directory where all reports reside
-		subprocess.run(talon_priming_check, shell=True)
-
-	### Fourth step: annotating and quantification of the reads
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  4/10 TALON - Annotating and quantification of the reads: in progress ..')
-	talon_annotation = " ".join([
-	"talon",  # Call talon
-	"--threads", args.threads,  # Number of threads to be used by the script
-	"--db", talon_database,  # TALON database
-	"--build", 'hg38',  # Genome build (i.e. hg38) to use
-	"--o", os.path.join(talon_analysis, "prefilt"),  # Prefix for output files
-	"--f", csv_file,  # Dataset config file: dataset name, sample description, platform, sam file (comma-delimited)
-	"2>>", os.path.join(pipeline_reports, "talon4_annotationNquantification-report.txt")])  # Directory where all reports reside
-	subprocess.run(talon_annotation, shell=True)
-	
-	### Fifth step: summarising how many of each transcript were found (prior to any filtering)
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  5/10 TALON - Summarising how many of each transcript were found (prior to any filtering): in progress ..')
-	talon_summary = " ".join([
-	"talon_summarize",  # Call talon_summarize
-	"--db", talon_database,  # TALON database
-	"--o", os.path.join(talon_analysis, "prefilt"),  # Prefix for output file
-	"2>>", os.path.join(pipeline_reports, "talon5_summary-report.txt")])  # Directory where all reports reside
-	subprocess.run(talon_summary, shell=True)
-	
-	### Sixth step: creating an abundance matrix without filtering (for use computing gene expression)
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  6/10 TALON - Creating an abundance matrix without filtering (gene expression): in progress ..')
-	talon_abundance = " ".join([
-	"talon_abundance",  # Call talon_abundance
-	"--db", talon_database,  # TALON database
-	"--build", 'hg38',  # Genome build (i.e. hg38) to use
-	"--annot", talon_database[:-3],  # Which annotation version to use
-	"--o", os.path.join(talon_analysis, "prefilt"),  # Prefix for output file
-	"2>>", os.path.join(pipeline_reports, "talon6_abundance-report.txt")])  # Directory where all reports reside
-	subprocess.run(talon_abundance, shell=True)
-
-	### Seventh step: Applying basic filtering steps and outputting several stats
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  7/10 TALON - Removing internal priming artifacts low abundance transcripts: in progress ..')
-	talon_filter = " ".join([
-	"talon_filter_transcripts",  # Call talon_filter_transcripts
-	"--db", talon_database,  # TALON database
-	"--annot", talon_database[:-3],  # Which annotation version to use
-	"--minCount 5",  # Number of minimum occurrences required for a novel transcript PER dataset
-	"--maxFracA 0.5",  # All of the supporting reads must have 50% or fewer As in the 20 bp interval after alignment
-	"--minDatasets", str(min(Counter(sample_group).values())),  # Minimum number of datasets novel transcripts must be found in
-	"--o", os.path.join(talon_analysis, "filtered_isoforms.csv"),  # Output
-	"2>>", os.path.join(pipeline_reports, "talon7_talon_filter-report.txt")])  # Directory where all reports reside
-	subprocess.run(talon_filter, shell=True)
-
-	### Eighth step: Applying basic filtering steps and outputting several stats
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  8/10 TALON - Removing low abundance isoforms based on step 7 and exporting basic statsistics: in progress ..')
-	talon_filter_n_report = " ".join([
-	"Rscript",  # Call Rscript
-	"{0}/talon_summarisation.R".format(rscripts),  # Calling the talon_summarisation.R script
-	os.path.join(talon_analysis, "prefilt_talon_abundance.tsv"),  # Input matrix
-	R_analysis,  # Output directory
-	os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
-	os.path.join(talon_analysis, "filtered_isoforms.csv"),  # Filtered transcripts to maintain
-	"2>>", os.path.join(pipeline_reports, "talon8_summarisation.txt")])  # Directory where all reports reside
-	subprocess.run(talon_filter_n_report, shell=True)
-
-	### Ninth step: Generating TALON report for each dataset
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Generating TALON report for each dataset: in progress ..')
-	for file in glob.glob(os.path.join(alignments_dir, "*.genome.bam")):
-		sample_name = os.path.basename(file).split(".")[0]
-		output_dir = os.path.join(R_analysis, f"talon_reports/{sample_name}_report")
-		if not os.path.exists(output_dir): os.makedirs(output_dir)
-		talon_report = " ".join([
-		"talon_generate_report",  # Call talon_abundance
-		"--db", talon_database,  # TALON database
-		"--whitelists", os.path.join(talon_analysis, "filtered_isoforms.csv"),  # Filtered transcripts to be reported
-		"--datasets", sample_name,  # Input of the filtered tables produced on the previous step
-		"--outdir", output_dir,  # Output dir
-		"2>>", os.path.join(pipeline_reports, "talon9_generate_report-report.txt")])  # Directory where all reports reside
-		subprocess.run(talon_report, shell=True)
-
-	### Tenth step: Obtaining the TALON database in GTF format
-	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/10 TALON - Obtaining the transcriptome annotation from the TALON database: in progress ..')
-	talon_export_db = " ".join([
-	"talon_create_GTF",  # Call talon_create_GTF
-	"--observed",  # the GTF file will only include transcripts that were observed in at least one dataset
-	"--db", talon_database,  # TALON database
-	"--build hg38",  # Genome build (hg38) to use
-	"--annot", talon_database[:-3],  # Which annotation version to use
-	"--o", os.path.join(talon_analysis, "database"),  # Output
-	"2>>", os.path.join(pipeline_reports, "talon10_exportdb-report.txt")])  # Directory where all reports reside
-	subprocess.run(talon_export_db, shell=True)
-	
-	### Removing unnecessary directories and files
-	subprocess.run(f"rm -r {temp}", shell=True)  
-	subprocess.run("rm -r talon_tmp", shell=True)
-	return
-
-class downstream_analysis:
+class expression_analysis:
 
 	def __init__(self):
-		self.polyA_length_est_analysis()
-		self.differential_expression_analysis()
-		self.methylation_detection()
+		self.talon_analysis()
 		return
 
-	def polyA_length_est_analysis(self):
-		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} POLYA LENGTH ESTIMATION ANALYSIS')
-		# TALON read annotation file and saving it as a dictionary 
+	def talon_analysis(self):
+		""" TALON takes transcripts from one or more long read datasets (SAM format) 
+		and assigns them transcript and gene identifiers based on a database-bound
+		annotation. Novel events are assigned new identifiers """
+		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ANNOTATION AND QUANTIFICATION USING TALON')
+		
+
+		talon_database = os.path.join(expression_analysis_dir, 'talon_gencode_v35.db')  ### TALON DB
+		R_analysis = os.path.join(expression_analysis_dir, "R_analysis")
+		if not os.path.exists(R_analysis): os.makedirs(R_analysis)
+		temp = os.path.join(expression_analysis_dir, 'transcriptClean_temp')
+		if not os.path.exists(temp): os.makedirs(temp)
+		filtered_isoforms_final = os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv")
+		"""
+		sample_group = []
+		# Create config file that is needed for talon and converting the aligned bam files to sam
+		csv_file = os.path.join(expression_analysis_dir,'talon_input.csv')
+		if not os.path.exists(csv_file) or os.stat(csv_file).st_size == 0:
+			print("{0}  Creating a description file necessary for Talon: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
+			with open(csv_file, "w") as talon_out:
+				for path, subdir, folder in os.walk(alignments_dir):
+					for file in sorted(folder):
+						if file.endswith('.genome.bam'):
+							sample_group.append(file.split(".")[0].split("_")[0])
+							# Output a csv file with 'sample_id, sample_group, technology, input_labeled_sam_file' which is gonna be needed in talon_annotation function
+							talon_out.write('{0},{1},ONT,{2}\n'.format(file.split(".")[0], file.split(".")[0].split("_")[0], os.path.join(temp, file).replace(".genome.bam", ".clean_labeled.sam")))
+							if not os.path.exists(os.path.join(path, file).replace(".bam", ".sam")):
+								print("{0}  Samtools - Converting the genomic bam file ({1}) to sam for Talon: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M"), file))
+								os.system('samtools view -h -@ {0} {1} > {2}'.format(args.threads, os.path.join(path, file), os.path.join(path, file).replace(".bam", ".sam")))
+
+
+		### Initial step: Correcting mismatches, microindels, and noncanonical splice junctions in long reads that have been mapped to the genome
+		sam_files = glob.glob(os.path.join(alignments_dir, "*.genome.sam"))
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1/10 TranscriptClean - Correcting mismatches, microindels, and noncanonical splice junctions in long reads: in progress ..')
+		for file in sam_files:
+			TranscriptClean = " ".join([
+			transcriptclean,  # Call TranscriptClean.py
+			"--sam", file,  # Input sam file
+			"--genome", refGenomeGRCh38_traclean,  # Reference genome fasta file
+			"--threads", args.threads,  # Number of threads to be used by the script
+			"--canonOnly",  # Output only canonical transcripts and transcripts containing annotated noncanonical junctions to the clean SAM file
+			"--spliceJns", sj_ref,  # Splice junction file extracted from the ref. GTF
+			"--deleteTmp",  # the temporary directory (TC_tmp) will be removed
+			"--outprefix", os.path.join(temp, os.path.basename(file).split(".")[0]),  # Outprefix for the outout file
+			"2>>", os.path.join(pipeline_reports, "talon1_transcriptclean-report.txt")])  # Directory where all reports reside
+			subprocess.run(TranscriptClean, shell=True)
+			os.remove(file)
+		
+		### Second step: Building the reference database
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 2/10 TALON - Initiating the database: in progress ..')
+		if os.path.exists(talon_database): os.remove(talon_database)
+		talon_initialize_database = " ".join([
+		"talon_initialize_database",  # Call talon_initialize_database
+		"--f", refAnnot,  # GTF annotation containing genes, transcripts, and edges
+		"--g", 'hg38',  # Genome build (i.e. hg38) to use
+		"--5p 500",  # Maximum allowable distance (bp) at the 5' end during annotation
+		"--3p 300",  # Maximum allowable distance (bp) at the 3' end during annotation
+		"--a", talon_database[:-3],  # Name of supplied annotation
+		"--o", talon_database[:-3],  # Outprefix for the annotation files
+		"2>>", os.path.join(pipeline_reports, "talon2_initialize_database-report.txt")])  # Directory where all reports reside
+		subprocess.run(talon_initialize_database, shell=True)
+
+		### Third step: internal priming check
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/10 TALON - Run talon_label_reads on each file to compute how likely each read is to be an internal priming product: in progress ..')
+		genome_alignments = [sum_file for sum_file in glob.glob(os.path.join(temp, "*clean.sam"))]
+		for file in genome_alignments:
+			talon_priming_check = " ".join([
+			"talon_label_reads",  # Call talon talon_label_reads
+			"--t", args.threads,  # Number of threads to be used by the script
+			"--f", file,  # Input sam file
+			"--g", refGenomeGRCh38,  # Reference genome fasta file
+			"--tmpDir", os.path.join(expression_analysis_dir, "tmp_label_reads"),  # Path to directory for tmp files
+			"--deleteTmp",  # Temporary directory will be removed
+			"--o", os.path.join(temp, os.path.basename(file).replace("_clean.sam",".clean")),  # Prefix for output files
+			"2>>", os.path.join(pipeline_reports, "talon3_talon_priming_check-report.txt")])  # Directory where all reports reside
+			subprocess.run(talon_priming_check, shell=True)
+
+		### Fourth step: annotating and quantification of the reads
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  4/10 TALON - Annotating and quantification of the reads: in progress ..')
+		talon_annotation = " ".join([
+		"talon",  # Call talon
+		"--threads", args.threads,  # Number of threads to be used by the script
+		"--db", talon_database,  # TALON database
+		"--build", 'hg38',  # Genome build (i.e. hg38) to use
+		"--o", os.path.join(expression_analysis_dir, "prefilt"),  # Prefix for output files
+		"--f", csv_file,  # Dataset config file: dataset name, sample description, platform, sam file (comma-delimited)
+		"2>>", os.path.join(pipeline_reports, "talon4_annotationNquantification-report.txt")])  # Directory where all reports reside
+		subprocess.run(talon_annotation, shell=True)
+		
+		### Fifth step: summarising how many of each transcript were found (prior to any filtering)
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  5/10 TALON - Summarising how many of each transcript were found (prior to any filtering): in progress ..')
+		talon_summary = " ".join([
+		"talon_summarize",  # Call talon_summarize
+		"--db", talon_database,  # TALON database
+		"--o", os.path.join(expression_analysis_dir, "prefilt"),  # Prefix for output file
+		"2>>", os.path.join(pipeline_reports, "talon5_summary-report.txt")])  # Directory where all reports reside
+		subprocess.run(talon_summary, shell=True)
+		
+		### Sixth step: creating an abundance matrix without filtering (for use computing gene expression)
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  6/10 TALON - Creating an abundance matrix without filtering (gene expression): in progress ..')
+		talon_abundance = " ".join([
+		"talon_abundance",  # Call talon_abundance
+		"--db", talon_database,  # TALON database
+		"--build", 'hg38',  # Genome build (i.e. hg38) to use
+		"--annot", talon_database[:-3],  # Which annotation version to use
+		"--o", os.path.join(expression_analysis_dir, "prefilt"),  # Prefix for output file
+		"2>>", os.path.join(pipeline_reports, "talon6_abundance-report.txt")])  # Directory where all reports reside
+		subprocess.run(talon_abundance, shell=True)
+
+		### Seventh step: Applying basic filtering steps and outputting several stats
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  7/10 TALON - Removing internal priming artifacts low abundance transcripts: in progress ..')
+		talon_filter = " ".join([
+		"talon_filter_transcripts",  # Call talon_filter_transcripts
+		"--db", talon_database,  # TALON database
+		"--annot", talon_database[:-3],  # Which annotation version to use
+		"--minCount 5",  # Number of minimum occurrences required for a novel transcript PER dataset
+		"--maxFracA 0.5",  # All of the supporting reads must have 50% or fewer As in the 20 bp interval after alignment
+		"--minDatasets", str(min(Counter(sample_group).values())),  # Minimum number of datasets novel transcripts must be found in
+		"--o", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Output
+		"2>>", os.path.join(pipeline_reports, "talon7_talon_filter-report.txt")])  # Directory where all reports reside
+		subprocess.run(talon_filter, shell=True)
+		"""
+		### Eighth steo:
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  8/10 TALON - Applying custom filtering of the ISM group based on the polyA estimation: in progress ..')
+		prefit_abundance_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv")
+		prefilt_readannot_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_read_annot.tsv")
+		filtered_isoforms = os.path.join(expression_analysis_dir, "filtered_isoforms.csv")
+		self.polyA_filtering(prefit_abundance_matrix, prefilt_readannot_matrix, filtered_isoforms, filtered_isoforms_final)
+
+		# ### Ninth step: Applying basic filtering steps and outputting several stats
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing low abundance isoforms based on step 8 and exporting basic statsistics: in progress ..')
+		# talon_filter_n_report = " ".join([
+		# "Rscript",  # Call Rscript
+		# f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
+		# os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
+		# R_analysis,  # Output directory
+		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		# os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to maintain
+		# polyA_data,  # Filtered transcripts to exclude based on polyA analysis
+		# "2>>", os.path.join(pipeline_reports, "talon8_summarisation.txt")])  # Directory where all reports reside
+		# subprocess.run(talon_filter_n_report, shell=True)
+
+		# ### Tenth step: Generating TALON report for each dataset
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/11 TALON - Generating TALON report for each dataset: in progress ..')
+		# for file in glob.glob(os.path.join(alignments_dir, "*.genome.bam")):
+		# 	sample_name = os.path.basename(file).split(".")[0]
+		# 	output_dir = os.path.join(R_analysis, f"talon_reports/{sample_name}_report")
+		# 	if not os.path.exists(output_dir): os.makedirs(output_dir)
+		# 	talon_report = " ".join([
+		# 	"talon_generate_report",  # Call talon_abundance
+		# 	"--db", talon_database,  # TALON database
+		# 	"--whitelists", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to be reported
+		# 	"--datasets", sample_name,  # Input of the filtered tables produced on the previous step
+		# 	"--outdir", output_dir,  # Output dir
+		# 	"2>>", os.path.join(pipeline_reports, "talon9_generate_report-report.txt")])  # Directory where all reports reside
+		# 	subprocess.run(talon_report, shell=True)
+
+
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/11 TALON - Obtaining the transcriptome annotation from the TALON database: in progress ..')
+		# talon_export_db = " ".join([
+		# "talon_create_GTF",  # Call talon_create_GTF
+		# "--observed",  # the GTF file will only include transcripts that were observed in at least one dataset
+		# "--db", talon_database,  # TALON database
+		# "--build hg38",  # Genome build (hg38) to use
+		# "--annot", talon_database[:-3],  # Which annotation version to use
+		# "--o", os.path.join(expression_analysis_dir, "database"),  # Output
+		# "2>>", os.path.join(pipeline_reports, "talon11_exportdb-report.txt")])  # Directory where all reports reside
+		# subprocess.run(talon_export_db, shell=True)
+		
+		# ### Removing unnecessary directories and files
+		# subprocess.run(f"rm -r {temp}", shell=True)  
+		# subprocess.run("rm -r talon_tmp", shell=True)
+		return
+
+	def polyA_filtering(self, prefilt_talon_abundance, talon_read_annot, filtered_isoforms, output_file):
+		""" Here is where all the magic of the special filtering is taking place. 
+		Here we are using the information of the polyA length estimation to filter 
+		out novel transcripts in the ISM category """
+		
+		
+		filtered_isolist = {}
+		with open(filtered_isoforms) as filtin:
+			for line in filtin:
+				filtered_isolist[line.strip().split(",")[1]] = None
+
+		prefiltered_transcripts = {}
+		with open(prefilt_talon_abundance) as filt_tr:
+			for line in filt_tr:
+				if not line.startswith("gene_ID"):
+					if line.strip().split("\t")[1] in filtered_isolist:
+						prefiltered_transcripts[line.strip().split("\t")[3]] = line.strip().split("\t")[1]
+
 		read_annot_dict = {}
-		talon_read_annot = os.path.join(expression_analysis_dir,"talon_analysis/prefilt_talon_read_annot.tsv")
+		# TALON read annotation file and saving it as a dictionary 
 		with open(talon_read_annot) as read_annot:
 			for line in read_annot:
-				read = line.strip().split("\t")[0]
-				sample = line.strip().split("\t")[1]
-				transcript_id = line.strip().split("\t")[12]
-				gene_id = line.strip().split("\t")[11]
-				read_annot_dict[(sample, read)] = (transcript_id,gene_id)
+				if line.strip().split("\t")[12] in prefiltered_transcripts:
+					read = line.strip().split("\t")[0]
+					sample = line.strip().split("\t")[1]
+					transcript_id = line.strip().split("\t")[12]
+					read_type = "{0}_{1}_{2}".format(prefiltered_transcripts[transcript_id],line.strip().split("\t")[16],line.strip().split("\t")[17])
+					read_annot_dict[(sample, read)] = (transcript_id, read_type)
+					# print(sample, read, read_annot_dict[(sample, read)])
 
+		### Iterating through all "polya_results.tsv" obtained from the Nanopolish polyA function 
+		### in order to filter out transcripts in the ISM Prefix group without enough polyA evidence
+		filter_dict = {}
 		for path, subdir, folder in os.walk(analysis_dir):
 			for name in folder:
 				if name.endswith("polya_results.tsv"):
 					sample = name.split(".")[0]
 					polyA_length_est = os.path.join(path, name)
-					with open(polyA_length_est) as fin, \
-						 open(polyA_length_est.replace(".tsv",".transcripts.tsv"), "w") as transcript_out,\
-						 open(polyA_length_est.replace(".tsv",".genes.tsv"), "w") as gene_out:
+					with open(polyA_length_est) as fin:
+						for line in fin:
+							if not line.startswith("readname"):
+								readname = line.strip().split("\t")[0]
+								if (sample ,readname) in read_annot_dict:
+									transcript_id = read_annot_dict[(sample ,readname)][0] 
+									read_type = read_annot_dict[(sample ,readname)][1]
+									qc = ["OTHER","PASS"][line.strip().split("\t")[-1]=="PASS"]
+									transcript_ID = read_type.split("_")[0]
+									if "ISM_Prefix" in read_type :
+										if (transcript_id, transcript_ID) in filter_dict:
+											if qc ==  "PASS":
+												filter_dict[(transcript_id, transcript_ID)][0] += 1
+											else:
+												filter_dict[(transcript_id, transcript_ID)][1] += 1
+										else:
+											if qc ==  "PASS":
+												filter_dict[(transcript_id, transcript_ID)] = [1,0]
+											else:
+												filter_dict[(transcript_id, transcript_ID)] = [0,1]
+		
+		# for a,b in filter_dict.items():
+		# 	print(a,b)
+
+		not_to_keep = []
+		for transcript_id, qc_tags in filter_dict.items():	# Obtaining the list with the transcripts where the PASS is
+			if qc_tags[0] < qc_tags[1]:						# less than the rest
+				not_to_keep.append(transcript_id[1])
+
+		# If not_to_keep list is emplty, raise a warning..
+		if len(not_to_keep) == 0: print("WARNING: all ISM transcripts passed the polyA QC filter!")
+
+		with open(output_file, "w") as fout:			# Rewriting the "filtered_isoforms.csv" excluding the
+			for items,_ in filtered_isolist.items():	# filtered transcripts of the ISM group without enough
+				if not items in not_to_keep:			# polyA evidence.
+					fout.write(f"{items}\n")
+		return
+
+class downstream_analysis:
+
+	def __init__(self):
+		self.polyA_length_est_analysis()
+		# self.differential_expression_analysis()
+		# self.methylation_detection()
+		return
+
+	def polyA_length_est_analysis(self):
+		""" Here is where all the magic of the special filterring is taking place. 
+		Here we are using the information of the polyA length estimation to filter 
+		out novel transcripts in the ISM category. We are also performing the 
+		differenatial polyadelylation analysis (DPA) """
+		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} POLYA LENGTH ESTIMATION ANALYSIS')
+		
+
+
+		filtered_transcripts = {}
+		filt_talon_abundance = os.path.join(expression_analysis_dir,"filt_talon_abundance.csv")
+		with open(filt_talon_abundance) as filt_tr:
+			for line in filt_tr:
+				if not line.startswith("annot_gene_id"):
+					filtered_transcripts[line.strip().split(",")[1]] = None
+
+		read_annot_dict = {}
+		# TALON read annotation file and saving it as a dictionary 
+		talon_read_annot = os.path.join(expression_analysis_dir,"prefilt_talon_read_annot.tsv")
+		with open(talon_read_annot) as read_annot:
+			for line in read_annot:
+				if line.strip().split("\t")[12] in filtered_transcripts:
+					read = line.strip().split("\t")[0]
+					sample = line.strip().split("\t")[1]
+					transcript_id = line.strip().split("\t")[12]
+					gene_id = line.strip().split("\t")[11]
+					read_type = "{0}_{1}".format(line.strip().split("\t")[16], line.strip().split("\t")[17])
+					read_annot_dict[(sample, read)] = (transcript_id, gene_id, read_type)
+
+		for path, subdir, folder in os.walk(analysis_dir):
+			for name in folder:
+				if name.endswith("polya_results.tsv"):
+					sample = name.split(".")[0]
+					print(sample, datetime.now().strftime("%H:%M"))
+					polyA_length_est = os.path.join(path, name)
+					with open(polyA_length_est) as fin, open(polyA_length_est.replace(".tsv",".transcripts.tsv"), "w") as transcript_out:
+						 # open(polyA_length_est.replace(".tsv",".genes.tsv"), "w") as gene_out, \
 						for i, line in enumerate(fin, 1):
 							if i == 1:
+								# gene_out.write("{0}\n".format(line.strip()))
 								transcript_out.write("{0}\n".format(line.strip()))
-								gene_out.write("{0}\n".format(line.strip()))
 							else:
 								readname = line.strip().split("\t")[0]
-								contig = "NNNN0000{1}".format(line.strip().split("\t")[1], i)
-								transcript_id = read_annot_dict[(sample ,readname)][0] if (sample ,readname) in read_annot_dict else contig
-								gene_id = read_annot_dict[(sample ,readname)][1] if (sample ,readname) in read_annot_dict else contig
-								rest = "\t".join(line.strip().split("\t")[2:])
-								transcript_out.write(f"{readname}\t{transcript_id}\t{rest}\n")
-								gene_out.write(f"{readname}\t{gene_id}\t{rest}\n")
+								if (sample ,readname) in read_annot_dict:
+									# gene_id = read_annot_dict[(sample ,readname)][1]
+									transcript_id = read_annot_dict[(sample ,readname)][0] 
+									read_type = read_annot_dict[(sample ,readname)][2]
+									rest = "\t".join(line.strip().split("\t")[3:])
+									# gene_out.write(f"{readname}\t{gene_id}\t{read_type}\t{rest}\n")
+									transcript_out.write(f"{readname}\t{transcript_id}\t{read_type}\t{rest}\n")
 					
-					# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
-					sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir)
-					with open(sample_info_transcripts, "a") as fout_tr:
-						fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
-					nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
+		# 			# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
+		# 			sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir)
+		# 			with open(sample_info_transcripts, "a") as fout_tr:
+		# 				fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
+		# 			nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
 		return
 
 	def nanotail_analysis(self, sample_info, what):
@@ -504,8 +616,7 @@ class downstream_analysis:
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} DIFFERENTIAL EXPRESSION ANALYSIS')
 		
 
-		talon_analysis = os.path.join(expression_analysis_dir, 'talon_analysis')
-		R_analysis = os.path.join(talon_analysis, "R_analysis")
+		R_analysis = os.path.join(expression_analysis_dir, "R_analysis")
 		if not os.path.exists(R_analysis): os.makedirs(R_analysis)
 		
 		### First step: Exploratory analysis
@@ -513,8 +624,8 @@ class downstream_analysis:
 		expl_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_ExplAnalysis.R",  # Calling the diffExpr_ExplAnalysis.R script
-		os.path.join(talon_analysis, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
-		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
 		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
 		args.n_top,  # Top n_top genes for creating the heatmap
@@ -526,8 +637,8 @@ class downstream_analysis:
 		dge_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DGE.R",  # Calling the diffExpr_DGE.R script
-		os.path.join(talon_analysis, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
-		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
 		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
 		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
@@ -540,9 +651,9 @@ class downstream_analysis:
 		dte_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DTE.R",  # Calling the diffExpr_DTE.R script
-		os.path.join(talon_analysis, "filt_talon_abundance.csv"),  # Input filtered matrix
-		os.path.join(talon_analysis, "prefilt_talon_read_annot.tsv"),  # Read annotation matrix
-		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "filt_talon_abundance.csv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "prefilt_talon_read_annot.tsv"),  # Read annotation matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
 		args.minFeatureExpr,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
 		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
@@ -555,8 +666,8 @@ class downstream_analysis:
 		dtu_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DTU.R",  # Calling the diffExpr_DTU.R script
-		os.path.join(talon_analysis, "filt_talon_abundance.csv"),  # Input filtered matrix
-		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "filt_talon_abundance.csv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
 		R_analysis,  # Output directory
 		args.minFeatureExpr,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
 		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
@@ -567,14 +678,14 @@ class downstream_analysis:
 
 		### Fifth step: DEU
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  5/ Differential Expression - Differential Exon Usage (DEU) analysis using DRIMSeq/DEXSeq: in progress ..')
-		talon_db_gtf = os.path.join(talon_analysis, "database_talon.gtf")
-		talon_db_gff = os.path.join(talon_analysis, "database_talon.gff")
+		talon_db_gtf = os.path.join(expression_analysis_dir, "database_talon.gtf")
+		talon_db_gff = os.path.join(expression_analysis_dir, "database_talon.gff")
 		subprocess.call(f"{dexseq_prepare_annot} {talon_db_gtf} {talon_db_gff}", shell=True)
 		deu_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DEU.R",  # Calling the diffExpr_DTU.R script
-		os.path.join(talon_analysis, "filt_talon_abundance.csv"),  # Input filtered matrix
-		os.path.join(talon_analysis, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "filt_talon_abundance.csv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
 		talon_db_gff,  # Input TALON database in gff format
 		R_analysis,  # Output directory
 		args.minFeatureExpr,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
@@ -588,7 +699,7 @@ class downstream_analysis:
 
 	def talon_visualisation():
 		annot = {}
-		with open(os.path.join(talon_analysis, "database_talon.gtf")) as ref_in:
+		with open(os.path.join(expression_analysis_dir, "database_talon.gtf")) as ref_in:
 			for i, line in enumerate(ref_in):
 				if not line.startswith("#"):
 					if line.split("\t")[2].strip() == 'transcript':
@@ -599,7 +710,7 @@ class downstream_analysis:
 		data = {}
 		header = []
 		nc = ["miRNA", "piRNA", "rRNA", "siRNA", "snRNA", "snoRNA", "tRNA", "vaultRNA"]
-		with open("{0}/filt_talon_abundance.csv".format(talon_analysis)) as mat_in:
+		with open("{0}/filt_talon_abundance.csv".format(expression_analysis_dir)) as mat_in:
 			for i, line in enumerate(mat_in, 1):
 				if i == 1:
 					header = line.strip().split(",")[9:]
@@ -628,7 +739,7 @@ class downstream_analysis:
 		header.insert(1, "transcript_type")  # Inserting transcript_type in header
 		
 		# Writing output to file 'expression_matrix.csv'
-		with open(f"{talon_analysis}/perTranscript_expression_matrix.csv", "w") as fout:
+		with open(f"{expression_analysis_dir}/perTranscript_expression_matrix.csv", "w") as fout:
 			fout.write("{0}\n".format(','.join(header)))
 			for key, values in data.items():
 				fout.write("{0},{1}\n".format(','.join(key), ','.join(values)))
@@ -637,7 +748,7 @@ class downstream_analysis:
 		gene_type_sum = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/transcript_type_summary.R",  # Calling the transcript_type_summary.R script
-		"{talon_analysis}/perTranscript_expression_matrix.csv",  # Input matrix
+		"{expression_analysis_dir}/perTranscript_expression_matrix.csv",  # Input matrix
 		R_analysis,  # Output dir
 		"2>>", os.path.join(pipeline_reports, "R_transcriptType_sum-report.txt")])  # Directory where all reports reside
 		subprocess.run(gene_type_sum, shell=True)
@@ -771,13 +882,13 @@ def main():
 		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
 
 
-		# quality_control(sum_file, sample_id, raw_data_dir)
+	# 	quality_control(sum_file, sample_id, raw_data_dir)
 
-		alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+	# 	alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 			
-		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+	# 	polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
-	# expression_matrix()
+	expression_analysis()
 
 	# downstream_analysis()
 
