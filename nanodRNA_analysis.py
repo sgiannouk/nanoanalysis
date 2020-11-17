@@ -58,7 +58,7 @@ analysis_dir = os.path.join(script_dir, "analysis_batch3")
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")
 alignments_dir = os.path.join(analysis_dir, "alignments")
 reports_dir = os.path.join(analysis_dir, "reports")
-# Reposrting directories
+# Reporting directories
 initial_qc_reports = os.path.join(analysis_dir, "reports/initial_qc_reports")
 postAlignment_reports = os.path.join(analysis_dir, "reports/post-alignment_qc_reports")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
@@ -115,7 +115,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	"|" "samtools view",
 	"--threads", args.threads,  # Number of threads to be used by 'samtools view'
 	"-Sb",
-	"-q 10",  # Filterring out reads with mapping quality lower than 10
+	"-q 10",  # Filtering out reads with mapping quality lower than 10
 	"|", "samtools sort",  # Calling 'samtools sort' to sort the output alignment file
 	"--threads", args.threads,  # Number of threads to be used by 'samtools sort'
 	"-",  # Input from standard output
@@ -128,7 +128,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	return
 
 def mapping_qc(sample_id, seq_summary_file, bam_file):
-	""" Outputing multiple alignment statistics """
+	""" Outputting multiple alignment statistics """
 	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} GENERATING ALIGNMENT STATS')
 	
 
@@ -201,7 +201,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# Check the strandness of the reads
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  RSeQC - Generating read strandness stats of {sample_id}: in progress ..')
 	strandness = ' '.join([
-	"infer_experiment.py",  # Call samtools flagstat
+	"infer_experiment.py",  # Call samtools infer_experiment
 	"-i", bam_file,  # Input BAM file
 	"-r", refAnnot_bed,
 	f"> {postAlignment_reports}/{sample_id}.strandness.txt",  # Output file
@@ -211,7 +211,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# Gene body coverage
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  RSeQC - Generating gene body coverage of {sample_id}: in progress ..')
 	gene_coverage = ' '.join([
-	"geneBody_coverage.py",  # Call samtools flagstat
+	"geneBody_coverage.py",  # Call samtools geneBody_coverage
 	"-i", bam_file,  # Input BAM file
 	"-r", refAnnot_bed,
 	f"-o", "{postAlignment_reports}/gene_coverage.{sample_id}",  # Output file
@@ -221,7 +221,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# Check duplicate reads
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Picard - Extracting read duplication stats of {sample_id}: in progress ..')
 	duplicate_reads = ' '.join([
-	"picard-tools MarkDuplicates",  # Call samtools flagstat
+	"picard-tools MarkDuplicates",  # Call MarkDuplicates
 	f"INPUT= {bam_file}",  # Input BAM file
 	f"OUTPUT= {alignments_dir}/{sample_id}.genome.dedup.bam",
 	f"METRICS_FILE= {postAlignment_reports}/{sample_id}.mark_duplicates.txt",  # Output file
@@ -232,7 +232,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# Number of reads mapped to each chromosome
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  RSeQC - Generating mapping stats of {sample_id}: in progress ..')
 	mapping_pos = ' '.join([
-	"samtools idxstats",  # Call samtools flagstat
+	"samtools idxstats",  # Call samtools idxstats
 	bam_file,  # Input BAM file
 	f"> {postAlignment_reports}/{sample_id}.samtools_idxstats.txt",  # Output file
 	"2>>", os.path.join(pipeline_reports, "postalignment_samtools_idxstats-report.txt")])
@@ -240,7 +240,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	return
 
 def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
-	""" PolyA length estimation using Nanopolis polyA """
+	""" PolyA length estimation using Nanopolish polyA """
 	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} POLYA LENGTH ESTIMATION')
 
 
@@ -254,7 +254,7 @@ def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
 	# Nanopolish index
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Nanopolish index - Indexing the output of the guppy basecaller of sample {sample_id}: in progress ..')
 	indexing = ' '.join([
-	"nanopolish index",  # Calling nanopolish index
+	"nanopolish index",  # Calling Nanopolish index
 	"--sequencing-summary", sum_file,  # the sequencing summary file from Guppy
 	f"--directory", "{raw_data_dir}/workspace/fast5_pass",  # Input BAM file
 	extracted_fastq,
@@ -264,7 +264,7 @@ def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
 	# Nanopolish polyA
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Nanopolish polyA -  Estimate the polyadenylated tail lengths of {sample_id}: in progress ..')
 	polyA_est = ' '.join([
-	"nanopolish polya",  # Calling nanopolish polya
+	"nanopolish polya",  # Calling Nanopolish polyA
 	"--threads", args.threads,  # Number of threads to use
 	"--genome", refGenomeGRCh38,  # The reference genome assembly that  was used
 	"--reads", extracted_fastq,  # The raw 1D ONT direct RNA reads in fastq
@@ -282,6 +282,7 @@ class expression_analysis:
 
 	def __init__(self):
 		self.talon_analysis()
+		self.talon_visualisation()
 		return
 
 	def talon_analysis(self):
@@ -405,29 +406,28 @@ class expression_analysis:
 		"--o", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Output
 		"2>>", os.path.join(pipeline_reports, "talon7_talon_filter-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_filter, shell=True)
-		"""
-		### Eighth steo:
+		
+		### Eighth step:
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  8/10 TALON - Applying custom filtering of the ISM group based on the polyA estimation: in progress ..')
 		prefit_abundance_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv")
 		prefilt_readannot_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_read_annot.tsv")
 		filtered_isoforms = os.path.join(expression_analysis_dir, "filtered_isoforms.csv")
 		self.polyA_filtering(prefit_abundance_matrix, prefilt_readannot_matrix, filtered_isoforms, filtered_isoforms_final)
-
-		# ### Ninth step: Applying basic filtering steps and outputting several stats
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing low abundance isoforms based on step 8 and exporting basic statsistics: in progress ..')
-		# talon_filter_n_report = " ".join([
-		# "Rscript",  # Call Rscript
-		# f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
-		# os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
-		# R_analysis,  # Output directory
-		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		# os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to maintain
-		# polyA_data,  # Filtered transcripts to exclude based on polyA analysis
-		# "2>>", os.path.join(pipeline_reports, "talon8_summarisation.txt")])  # Directory where all reports reside
-		# subprocess.run(talon_filter_n_report, shell=True)
+		"""
+		### Ninth step: Applying basic filtering steps and outputting several stats
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing filtered isoforms based on step 8 and exporting basic statsistics: in progress ..')
+		talon_filter_n_report = " ".join([
+		"Rscript",  # Call Rscript
+		f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
+		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
+		R_analysis,  # Output directory
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to maintain
+		"2>>", os.path.join(pipeline_reports, "talon9_summarisation.txt")])  # Directory where all reports reside
+		subprocess.run(talon_filter_n_report, shell=True)
 
 		# ### Tenth step: Generating TALON report for each dataset
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/11 TALON - Generating TALON report for each dataset: in progress ..')
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/10 TALON - Generating TALON report for each dataset: in progress ..')
 		# for file in glob.glob(os.path.join(alignments_dir, "*.genome.bam")):
 		# 	sample_name = os.path.basename(file).split(".")[0]
 		# 	output_dir = os.path.join(R_analysis, f"talon_reports/{sample_name}_report")
@@ -435,24 +435,12 @@ class expression_analysis:
 		# 	talon_report = " ".join([
 		# 	"talon_generate_report",  # Call talon_abundance
 		# 	"--db", talon_database,  # TALON database
-		# 	"--whitelists", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to be reported
+		# 	"--whitelists", os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to be reported
 		# 	"--datasets", sample_name,  # Input of the filtered tables produced on the previous step
 		# 	"--outdir", output_dir,  # Output dir
-		# 	"2>>", os.path.join(pipeline_reports, "talon9_generate_report-report.txt")])  # Directory where all reports reside
+		# 	"2>>", os.path.join(pipeline_reports, "talon10_generate_report-report.txt")])  # Directory where all reports reside
 		# 	subprocess.run(talon_report, shell=True)
 
-
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/11 TALON - Obtaining the transcriptome annotation from the TALON database: in progress ..')
-		# talon_export_db = " ".join([
-		# "talon_create_GTF",  # Call talon_create_GTF
-		# "--observed",  # the GTF file will only include transcripts that were observed in at least one dataset
-		# "--db", talon_database,  # TALON database
-		# "--build hg38",  # Genome build (hg38) to use
-		# "--annot", talon_database[:-3],  # Which annotation version to use
-		# "--o", os.path.join(expression_analysis_dir, "database"),  # Output
-		# "2>>", os.path.join(pipeline_reports, "talon11_exportdb-report.txt")])  # Directory where all reports reside
-		# subprocess.run(talon_export_db, shell=True)
-		
 		# ### Removing unnecessary directories and files
 		# subprocess.run(f"rm -r {temp}", shell=True)  
 		# subprocess.run("rm -r talon_tmp", shell=True)
@@ -467,7 +455,7 @@ class expression_analysis:
 		filtered_isolist = {}
 		with open(filtered_isoforms) as filtin:
 			for line in filtin:
-				filtered_isolist[line.strip().split(",")[1]] = None
+				filtered_isolist[line.strip().split(",")[1]] = line.strip().split(",")[0]
 
 		prefiltered_transcripts = {}
 		with open(prefilt_talon_abundance) as filt_tr:
@@ -485,8 +473,9 @@ class expression_analysis:
 					sample = line.strip().split("\t")[1]
 					transcript_id = line.strip().split("\t")[12]
 					read_type = "{0}_{1}_{2}".format(prefiltered_transcripts[transcript_id],line.strip().split("\t")[16],line.strip().split("\t")[17])
-					read_annot_dict[(sample, read)] = (transcript_id, read_type)
-					# print(sample, read, read_annot_dict[(sample, read)])
+					if not "ISM_Suffix" in read_type:  # Removing the ISM Suffix group from the downstream analysis. This will be analysed differently
+						read_annot_dict[(sample, read)] = (transcript_id, read_type)
+						# print(sample, read, read_annot_dict[(sample, read)])
 
 		### Iterating through all "polya_results.tsv" obtained from the Nanopolish polyA function 
 		### in order to filter out transcripts in the ISM Prefix group without enough polyA evidence
@@ -525,13 +514,83 @@ class expression_analysis:
 			if qc_tags[0] < qc_tags[1]:						# less than the rest
 				not_to_keep.append(transcript_id[1])
 
-		# If not_to_keep list is emplty, raise a warning..
+		# If not_to_keep list is empty, raise a warning..
 		if len(not_to_keep) == 0: print("WARNING: all ISM transcripts passed the polyA QC filter!")
 
 		with open(output_file, "w") as fout:			# Rewriting the "filtered_isoforms.csv" excluding the
-			for items,_ in filtered_isolist.items():	# filtered transcripts of the ISM group without enough
-				if not items in not_to_keep:			# polyA evidence.
-					fout.write(f"{items}\n")
+			for trID, gnID in filtered_isolist.items():	# filtered transcripts of the ISM group without enough
+				if not trID in not_to_keep:			# polyA evidence.
+					fout.write(f"{gnID},{trID}\n")
+
+		return
+
+	def talon_visualisation(self):
+
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Obtaining the transcriptome annotation from the TALON database: in progress ..')
+		talon_export_db = " ".join([
+		"talon_create_GTF",  # Call talon_create_GTF
+		"--db", talon_database,  # TALON database
+		"--build hg38",  # Genome build (hg38) to use
+		"--annot", talon_database[:-3],  # Which annotation version to use
+		"--o", os.path.join(expression_analysis_dir, "database"),  # Output
+		"--whitelist", f"{expression_analysis_dir}/filtered_isoforms_final.csv",  # Whitelist file of transcripts to include in the output
+		"2>>", os.path.join(pipeline_reports, "talonvisual_exportdb-report.txt")])  # Directory where all reports reside
+		subprocess.run(talon_export_db, shell=True)
+		
+		annot = {}
+		with open(os.path.join(expression_analysis_dir, "database_talon.gtf")) as ref_in:
+			for i, line in enumerate(ref_in):
+				if not line.startswith("#"):
+					if line.split("\t")[2].strip() == 'transcript':
+						transcript_id = line.split("\t")[-1].split(";")[1].split(" ")[-1].strip("\"")
+						transcript_type = ["novel", line.split("\t")[-1].split(";")[4].split()[1].strip("\"").strip()][transcript_id.startswith("ENST")]
+						annot[transcript_id] = transcript_type
+						
+		data = {}
+		header = []
+		nc = ["miRNA", "piRNA", "rRNA", "siRNA", "snRNA", "snoRNA", "tRNA", "vaultRNA"]
+		with open("{0}/filt_talon_abundance.csv".format(expression_analysis_dir)) as mat_in:
+			for i, line in enumerate(mat_in, 1):
+				if i == 1:
+					header = line.strip().split(",")[9:]
+				else:
+					transcript = line.strip().split(",")[1]
+					values = line.strip().split(",")[9:]
+					if sum(map(int, values)) >= 10:
+						# Grouping all pseudogenes
+						if annot[transcript].endswith("pseudogene"):
+							data[(transcript, "pseudogene")] = values
+						# Grouping all immunoglobin genes
+						elif annot[transcript].startswith("IG_"):
+							data[(transcript, "Immunoglobulin_gene")] = values
+						# Grouping all T-cell receptor genes
+						elif annot[transcript].startswith("TR_"):
+							data[(transcript, "Tcell_receptor_gene")] = values
+						# Renaming TEC group
+						elif annot[transcript].startswith("TEC"):
+							data[(transcript, "To_be_Experimentally_Confirmed")] = values
+						# Rest
+						else:
+							data[(transcript, annot[transcript])] = values
+
+		# Remove paths from sample names
+		header.insert(0,"transcript_id")  # Inserting ttranscript_id in header
+		header.insert(1, "transcript_type")  # Inserting transcript_type in header
+		
+		# Writing output to file 'expression_matrix.csv'
+		with open(f"{expression_analysis_dir}/perTranscript_expression_matrix.csv", "w") as fout:
+			fout.write("{0}\n".format(','.join(header)))
+			for key, values in data.items():
+				fout.write("{0},{1}\n".format(','.join(key), ','.join(values)))
+
+		print("{0}  Visualising the RNA categories found in the TALON expression matrix: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
+		gene_type_sum = " ".join([
+		"Rscript",  # Call Rscript
+		f"{rscripts}/transcript_type_summary.R",  # Calling the transcript_type_summary.R script
+		"{expression_analysis_dir}/perTranscript_expression_matrix.csv",  # Input matrix
+		R_analysis,  # Output dir
+		"2>>", os.path.join(pipeline_reports, "R_transcriptType_sum-report.txt")])  # Directory where all reports reside
+		subprocess.run(gene_type_sum, shell=True)
 		return
 
 class downstream_analysis:
@@ -696,63 +755,6 @@ class downstream_analysis:
 		subprocess.run(deu_analysis, shell=True)
 		# talon_visualisation()
 		return 
-
-	def talon_visualisation():
-		annot = {}
-		with open(os.path.join(expression_analysis_dir, "database_talon.gtf")) as ref_in:
-			for i, line in enumerate(ref_in):
-				if not line.startswith("#"):
-					if line.split("\t")[2].strip() == 'transcript':
-						transcript_id = line.split("\t")[-1].split(";")[1].split(" ")[-1].strip("\"")
-						transcript_type = ["novel", line.split("\t")[-1].split(";")[4].split()[1].strip("\"").strip()][transcript_id.startswith("ENST")]
-						annot[transcript_id] = transcript_type
-						
-		data = {}
-		header = []
-		nc = ["miRNA", "piRNA", "rRNA", "siRNA", "snRNA", "snoRNA", "tRNA", "vaultRNA"]
-		with open("{0}/filt_talon_abundance.csv".format(expression_analysis_dir)) as mat_in:
-			for i, line in enumerate(mat_in, 1):
-				if i == 1:
-					header = line.strip().split(",")[9:]
-				else:
-					transcript = line.strip().split(",")[1]
-					values = line.strip().split(",")[9:]
-					if sum(map(int, values)) >= 10:
-						# Grouping all pseudogenes
-						if annot[transcript].endswith("pseudogene"):
-							data[(transcript, "pseudogene")] = values
-						# Grouping all immunoglobin genes
-						elif annot[transcript].startswith("IG_"):
-							data[(transcript, "Immunoglobulin_gene")] = values
-						# Grouping all T-cell receptor genes
-						elif annot[transcript].startswith("TR_"):
-							data[(transcript, "Tcell_receptor_gene")] = values
-						# Reanming TEC group
-						elif annot[transcript].startswith("TEC"):
-							data[(transcript, "To_be_Experimentally_Confirmed")] = values
-						# Rest
-						else:
-							data[(transcript, annot[transcript])] = values
-
-		# Remove paths from sample names
-		header.insert(0,"transcript_id")  # Inserting ttranscript_id in header
-		header.insert(1, "transcript_type")  # Inserting transcript_type in header
-		
-		# Writing output to file 'expression_matrix.csv'
-		with open(f"{expression_analysis_dir}/perTranscript_expression_matrix.csv", "w") as fout:
-			fout.write("{0}\n".format(','.join(header)))
-			for key, values in data.items():
-				fout.write("{0},{1}\n".format(','.join(key), ','.join(values)))
-
-		print("{0}  Visualising the RNA categories found in the TALON expression matrix: in progress ..".format(datetime.now().strftime("%d.%m.%Y %H:%M")))
-		gene_type_sum = " ".join([
-		"Rscript",  # Call Rscript
-		f"{rscripts}/transcript_type_summary.R",  # Calling the transcript_type_summary.R script
-		"{expression_analysis_dir}/perTranscript_expression_matrix.csv",  # Input matrix
-		R_analysis,  # Output dir
-		"2>>", os.path.join(pipeline_reports, "R_transcriptType_sum-report.txt")])  # Directory where all reports reside
-		subprocess.run(gene_type_sum, shell=True)
-		return
 
 	def methylation_detection(self):
 		if not os.path.exists(methylation_dir): os.makedirs(methylation_dir)
