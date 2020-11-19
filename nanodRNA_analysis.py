@@ -298,7 +298,7 @@ class expression_analysis:
 		temp = os.path.join(expression_analysis_dir, 'transcriptClean_temp')
 		if not os.path.exists(temp): os.makedirs(temp)
 		filtered_isoforms_final = os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv")
-		"""
+
 		sample_group = []
 		# Create config file that is needed for talon and converting the aligned bam files to sam
 		csv_file = os.path.join(expression_analysis_dir,'talon_input.csv')
@@ -406,7 +406,7 @@ class expression_analysis:
 		"--o", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Output
 		"2>>", os.path.join(pipeline_reports, "talon7_talon_filter-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_filter, shell=True)
-		"""
+
 		### Eighth step:
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  8/10 TALON - Applying custom filtering of the ISM group based on the polyA estimation: in progress ..')
 		prefit_abundance_matrix = os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv")
@@ -414,36 +414,37 @@ class expression_analysis:
 		filtered_isoforms = os.path.join(expression_analysis_dir, "filtered_isoforms.csv")
 		self.polyA_filtering(prefit_abundance_matrix, prefilt_readannot_matrix, filtered_isoforms, filtered_isoforms_final)
 		
-		# ### Ninth step: Applying basic filtering steps and outputting several stats
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing filtered isoforms based on step 8 and exporting basic statsistics: in progress ..')
-		# talon_filter_n_report = " ".join([
-		# "Rscript",  # Call Rscript
-		# f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
-		# os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
-		# R_analysis,  # Output directory
-		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		# os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to maintain
-		# "2>>", os.path.join(pipeline_reports, "talon9_summarisation.txt")])  # Directory where all reports reside
-		# subprocess.run(talon_filter_n_report, shell=True)
+		### Ninth step: Applying basic filtering steps and outputting several stats
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  9/10 TALON - Removing filtered isoforms based on step 8 and exporting basic statsistics (ISM filters included): in progress ..')
+		talon_filter_n_report = " ".join([
+		"Rscript",  # Call Rscript
+		f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
+		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
+		R_analysis,  # Output directory
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to maintain, including ISM filtering
+		os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to maintain, original
+		"2>>", os.path.join(pipeline_reports, "talon9_summarisation.txt")])  # Directory where all reports reside
+		subprocess.run(talon_filter_n_report, shell=True)
 
-		# ### Tenth step: Generating TALON report for each dataset
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/10 TALON - Generating TALON report for each dataset: in progress ..')
-		# for file in glob.glob(os.path.join(alignments_dir, "*.genome.bam")):
-		# 	sample_name = os.path.basename(file).split(".")[0]
-		# 	output_dir = os.path.join(R_analysis, f"talon_reports/{sample_name}_report")
-		# 	if not os.path.exists(output_dir): os.makedirs(output_dir)
-		# 	talon_report = " ".join([
-		# 	"talon_generate_report",  # Call talon_abundance
-		# 	"--db", talon_database,  # TALON database
-		# 	"--whitelists", os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to be reported
-		# 	"--datasets", sample_name,  # Input of the filtered tables produced on the previous step
-		# 	"--outdir", output_dir,  # Output dir
-		# 	"2>>", os.path.join(pipeline_reports, "talon10_generate_report-report.txt")])  # Directory where all reports reside
-		# 	subprocess.run(talon_report, shell=True)
+		### Tenth step: Generating TALON report for each dataset
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/10 TALON - Generating TALON report for each dataset (talon filters only): in progress ..')
+		for file in glob.glob(os.path.join(alignments_dir, "*.genome.bam")):
+			sample_name = os.path.basename(file).split(".")[0]
+			output_dir = os.path.join(R_analysis, f"talon_reports/{sample_name}_report")
+			if not os.path.exists(output_dir): os.makedirs(output_dir)
+			talon_report = " ".join([
+			"talon_generate_report",  # Call talon_abundance
+			"--db", talon_database,  # TALON database
+			"--whitelists", os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to be reported
+			"--datasets", sample_name,  # Input of the filtered tables produced on the previous step
+			"--outdir", output_dir,  # Output dir
+			"2>>", os.path.join(pipeline_reports, "talon10_generate_report-report.txt")])  # Directory where all reports reside
+			subprocess.run(talon_report, shell=True)
 
-		# ### Removing unnecessary directories and files
-		# subprocess.run(f"rm -r {temp}", shell=True)  
-		# subprocess.run("rm -r talon_tmp", shell=True)
+		### Removing unnecessary directories and files
+		subprocess.run(f"rm -r {temp}", shell=True)  
+		subprocess.run("rm -r talon_tmp", shell=True)
 		return
 
 	def polyA_filtering(self, prefilt_talon_abundance, talon_read_annot, filtered_isoforms, output_file):
@@ -524,7 +525,6 @@ class expression_analysis:
 			for trID, gnID in filtered_isolist.items():	# filtered transcripts of the ISM group without enough
 				if not trID in not_to_keep:			# polyA evidence.
 					fout.write(f"{gnID},{trID}\n")
-
 		return
 
 	def talon_visualisation(self):
@@ -708,6 +708,7 @@ class downstream_analysis:
 		"2>>", os.path.join(pipeline_reports, "diffExpr_dge_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(dge_analysis, shell=True)
 		
+
 		### Third step: DTE
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/ Differential Expression - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..')
 		dte_analysis = " ".join([
@@ -756,7 +757,6 @@ class downstream_analysis:
 		args.threads,  # Num of threads to use
 		"2>>", os.path.join(pipeline_reports, "diffExpr_deu_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(deu_analysis, shell=True)
-		# talon_visualisation()
 		return 
 
 	def methylation_detection(self):
