@@ -2,15 +2,17 @@
 ### ONT ANALYSIS / TALON summary analysis 
 
 args <- commandArgs(TRUE)
-if (length(args) == 4) {
+if (length(args) == 5) {
   # Input matrix as it is outputted from TALON
   matrix <- args[1]
   # Output direcotry
   main_outdir <- args[2]
   # CSV file used for running TALON
   input_groups <- args[3] 
-  # txt file containing the filtered transcripts
+  # file containing the filtered transcripts (including ISM filtering)
   filt_data <- args[4] 
+  # file containing the talon filtered transcripts
+  talon_filter <- args[5] 
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -48,14 +50,14 @@ iso_to_remain <- data.frame(transcript_ID=read.csv(filt_data, header=F)[,2])
 filtered_table <-  expr_file[expr_file$transcript_ID %in% iso_to_remain$transcript_ID, ]
 
 filtered_transcripts <- data.frame(filtered_transcripts = nrow(filtered_table))
-print(paste("Applying basic filtering step. Removing internal priming artefacts and genomic transcripts.", sep=" " ))
+print(paste("Applying basic filtering step. Removing internal priming artefacts,\ngenomic transcripts and ISM group custom filtering.", sep=" " ))
 print(paste("Total number of remaining transcripts:", filtered_transcripts, sep=" " ))
 
 # Obtaining the important annotation to export the stats 
 filt_table_overview  <- filtered_table[ ,3:11]
 # Output the filtered expression matrix
 filtered_matrix <- filtered_table[ ,3:length(filtered_table)]
-write.csv(filtered_matrix, file=paste(dirname(main_outdir),"ISMsuffix_abumdance.csv",sep="/"), quote=F, row.names=F)
+write.csv(filtered_matrix, file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
 rm(matrix, filtered_matrix, iso_to_remain)
 
 # Output the ISM Suffix group in a different matrix
@@ -63,10 +65,13 @@ remain <- data.frame(transcript_ID=read.csv(talon_filter, header=F)[,2])
 # Applying basic filtering step 
 ISM_matrix <-  expr_file[expr_file$transcript_ID %in% remain$transcript_ID, ]
 ISM_matrix <- ISM_matrix[ISM_matrix$ISM_subtype=="Suffix", 3:length(ISM_matrix)]
-write.csv(filtered_matrix, file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
+write.csv(ISM_matrix, file=paste(dirname(main_outdir),"ISMsuffix_abumdance.csv",sep="/"), quote=F, row.names=F)
+print(paste("Extracting in total", nrow(ISM_matrix), "ISM Suffix isoforms",sep=" " ))
 rm(remain, ISM_matrix, expr_file)
 
-################## OVERALL ANALYSIS ################## 
+
+
+################## OVERALL ANALYSIS AND VISUALISATION ################## 
 # Extracting basic stats
 unique_genes <- data.frame(unique_genes = length(unique(filt_table_overview$annot_gene_id)))
 unique_transcripts <- data.frame(unique_transcripts = length(unique(filt_table_overview$annot_transcript_id)))
