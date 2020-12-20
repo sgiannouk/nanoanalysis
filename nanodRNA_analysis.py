@@ -284,7 +284,7 @@ class expression_analysis:
 
 	def __init__(self):
 		self.talon_analysis()
-		# self.talon_visualisation()
+		self.talon_visualisation()
 		return
 
 	def talon_analysis(self):
@@ -608,8 +608,8 @@ class expression_analysis:
 class downstream_analysis:
 
 	def __init__(self):
-		self.polyA_length_est_analysis()
-		# self.differential_expression_analysis()
+		# self.polyA_length_est_analysis()
+		self.differential_expression_analysis()
 		# self.methylation_detection()
 		return
 
@@ -683,7 +683,7 @@ class downstream_analysis:
 		subprocess.run(nanotail_analysis, shell=True)
 		return
 
-	def differential_expression_analysis():
+	def differential_expression_analysis(self):
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} DIFFERENTIAL EXPRESSION ANALYSIS')
 		
 
@@ -691,7 +691,7 @@ class downstream_analysis:
 		if not os.path.exists(R_analysis): os.makedirs(R_analysis)
 		
 		### First step: Exploratory analysis
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  1/ Differential Expression - Exploratory analysis: in progress ..')
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  1/4 Differential Expression - Exploratory analysis: in progress ..')
 		expl_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_ExplAnalysis.R",  # Calling the diffExpr_ExplAnalysis.R script
@@ -703,8 +703,9 @@ class downstream_analysis:
 		"2>>", os.path.join(pipeline_reports, "diffExpr_exploratory_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(expl_analysis, shell=True)
 		
+
 		### Second step: DGE
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  2/ Differential Expression - Differential Gene Expression (DGE) analysis using DRIMSeq/edgeR: in progress ..')
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  2/4 Differential Expression - Differential Gene Expression (DGE) analysis using DRIMSeq/edgeR: in progress ..')
 		dge_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DGE.R",  # Calling the diffExpr_DGE.R script
@@ -719,7 +720,7 @@ class downstream_analysis:
 		
 
 		### Third step: DTE
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/ Differential Expression - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..')
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/4 Differential Expression - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..')
 		dte_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DTE.R",  # Calling the diffExpr_DTE.R script
@@ -733,8 +734,9 @@ class downstream_analysis:
 		"2>>", os.path.join(pipeline_reports, "diffExpr_dte_analysis-report.txt")])  # Directory where all reports reside
 		subprocess.run(dte_analysis, shell=True)
 
+
 		### Fourth step: DTU
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  4/ Differential Expression - Differential Transcript Usage (DTU) analysis using IsoformSwitchAnalyzeR: in progress ..')
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  4/4 Differential Expression - Differential Transcript Usage (DTU) analysis using IsoformSwitchAnalyzeR: in progress ..')
 		dtu_analysis = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/diffExpr_DTU.R",  # Calling the diffExpr_DTU.R script
@@ -883,7 +885,7 @@ def main():
 
 	expression_analysis()
 
-	# downstream_analysis()
+	downstream_analysis()
 
 	# summary()
 
