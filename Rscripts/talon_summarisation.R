@@ -18,11 +18,11 @@ if (length(args) == 5) {
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_abundance.tsv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
-# filt_data <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filtered_isoforms_final.csv"
-# talon_filter <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filtered_isoforms.csv"
+matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_abundance.tsv"
+main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2"
+input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
+filt_data <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filtered_isoforms_final.csv"
+talon_filter <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filtered_isoforms.csv"
 
 library("dplyr")
 library("plotly")
@@ -50,24 +50,25 @@ iso_to_remain <- data.frame(transcript_ID=read.csv(filt_data, header=F)[,2])
 filtered_table <-  expr_file[expr_file$transcript_ID %in% iso_to_remain$transcript_ID, ]
 
 filtered_transcripts <- data.frame(filtered_transcripts = nrow(filtered_table))
-print(paste("Applying basic filtering step. Removing internal priming artefacts,\ngenomic transcripts and ISM group custom filtering.", sep=" " ))
+print(paste("Applying basic filtering step. Removing internal priming artefacts and genomic transcripts.", sep=" " ))
 print(paste("Total number of remaining transcripts:", filtered_transcripts, sep=" " ))
 
 # Obtaining the important annotation to export the stats 
 filt_table_overview  <- filtered_table[ ,3:11]
 # Output the filtered expression matrix
 filtered_matrix <- filtered_table[ ,3:length(filtered_table)]
+# Applying harder filters on ISM Suffix subgroup
+ISM_filt <- filtered_matrix[filtered_matrix$ISM_subtype=="Suffix", ]
+ISM_filt <- ISM_filt[which(rowSums(ISM_filt[,10:15])<40),2]
+print(paste("Removing ",length(ISM_filt)," that did not pass the 40 counts threshold!"), sep="")
+# Define not in
+`%notin%` <- Negate(`%in%`)
+# Removing ISM Suffix transcripts that are not fulfilling the hard filter
+filtered_matrix <- filtered_matrix[filtered_matrix$annot_transcript_id %notin% ISM_filt, ]
+# Extracting the filtered abundance matrix
 write.csv(filtered_matrix, file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
-rm(matrix, filtered_matrix, iso_to_remain)
+rm(matrix, filtered_matrix, iso_to_remain, ISM_filt)
 
-# Output the ISM Suffix group in a different matrix
-remain <- data.frame(transcript_ID=read.csv(talon_filter, header=F)[,2])
-# Applying basic filtering step 
-ISM_matrix <-  expr_file[expr_file$transcript_ID %in% remain$transcript_ID, ]
-ISM_matrix <- ISM_matrix[ISM_matrix$ISM_subtype=="Suffix", 3:length(ISM_matrix)]
-write.csv(ISM_matrix, file=paste(dirname(main_outdir),"ISMsuffix_abumdance.csv",sep="/"), quote=F, row.names=F)
-print(paste("Extracting in total", nrow(ISM_matrix), "ISM Suffix isoforms",sep=" " ))
-rm(remain, ISM_matrix, expr_file)
 
 
 
