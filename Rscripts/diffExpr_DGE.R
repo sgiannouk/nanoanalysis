@@ -48,7 +48,7 @@ setwd(outdir)
 # Input the filtered expression matrix
 expr_file <- read.table(matrix, sep="\t", header=T)
 expr_file <- expr_file[ ,3:length(expr_file)]
-# Ommiting the genomic transcripts 
+# Omitting the genomic transcripts 
 expr_file <- expr_file[which(expr_file$transcript_novelty != "Genomic"), ]
 
 # Exporting the unfiltered table
@@ -270,11 +270,8 @@ rm(melt_top30_sigNorm, top30_sigNorm)
 rm(matrix, filtered_counts, edgeR_table, edger_res, results_selected)
 
 
+### PLOTTING THE PERCENTAGE OF ISOFORMS PER NUMBER OF TRANSCRIPTS ###
 ### Checking number of  transcripts per condition
-# Obtaining the counts table
-matfile <- expr_file[ ,c(2,1,10:length(expr_file))]  # Obtaining only the annot_gene_id and the counts
-colnames(matfile)[1:2] <- c("feature_id","gene_id")
-
 # Create a dmDSdata object that is the starting point of DRIMSeq
 drimseq <- dmDSdata(counts = matfile, samples = group_samples)
 
@@ -299,9 +296,11 @@ selected_group1 <- data.frame(table(selected_group1$gene_id))
 # Collapsing and counting transcripts
 selected_group1 <- data.frame(table(selected_group1$Freq))
 # Normalising for total sequencing depth
-selected_group1 <- cbind(selected_group1[ ,1], data.frame(cpm(selected_group1[ ,2])))
+selected_group1 <- data.frame(cbind(selected_group1[ ,1], round(selected_group1[ ,2]/sum(selected_group1[ ,2])*100,3)))
+# selected_group1 <- cbind(selected_group1[ ,1], data.frame(cpm(selected_group1[ ,2])))
 colnames(selected_group1) <- c("Var1", "Freq")
-selected_group1$group <- as.character(sampletypevalues[1])  # Renaming all genes to samplegroup
+selected_group1$group <- as.character("Healthy samples")  # Renaming all genes to samplegroup
+selected_group1 <- selected_group1[order(selected_group1$Var1), ]
 
 
 # Selecting the samples from the second group
@@ -313,24 +312,37 @@ selected_group2 <- data.frame(table(selected_group2$gene_id))
 # Collapsing and counting transcripts
 selected_group2 <- data.frame(table(selected_group2$Freq))
 # Normalising for total sequencing depth
-selected_group2 <- cbind(selected_group2[ ,1], data.frame(cpm(selected_group2[ ,2])))
+selected_group2 <- data.frame(cbind(selected_group2[ ,1], round(selected_group2[ ,2]/sum(selected_group2[ ,2])*100,3)))
+# selected_group2 <- cbind(selected_group2[ ,1], data.frame(cpm(selected_group2[ ,2],log=T)))
 colnames(selected_group2) <- c("Var1", "Freq")
-selected_group2$group <- as.character(sampletypevalues[2])  # Renaming all genes to samplegroup
+selected_group2$group <- as.character("Cancer samples")  # Renaming all genes to samplegroup
+selected_group2 <- selected_group2[order(selected_group2$Var1), ]
 
 # Merging the melted data frames
-merged_melted_tables <- rbind(selected_group1[1:40, ], selected_group2[1:40, ])
-# write.table(merged_melted_tables, file=paste(outdir,"/table_of_NumofTrPerCondition.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-rm(selected_group1, selected_group2)
+merged_melted_tables <- rbind(selected_group1[1:20,], selected_group2[1:20,])
+# merged_melted_tables$group <- gsub('Healthy samples', 'NonTransf', merged_melted_tables$group)
+# rm(selected_group1, selected_group2)
 
 ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) + 
-  geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual("Groups", values = c("#66CC99", "#877598")) +
-  theme_bw() + 
-  theme(legend.position="bottom") +
-  theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-  labs(title="Number of isoform usage per condition (subset of up to 40 transcripts)", x="Number of transcprits", y="Relative frequency") +
-  ggsave(file=paste(outdir, "/DGE_TrNumPerCondition.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-
+  geom_bar(stat = "identity", position=position_dodge(width=0.7), alpha=.9) +
+  scale_fill_manual("", values = c("#794c74", "#709fb0")) +
+  theme_minimal() +
+  scale_x_continuous(limits= c(0, 20), breaks=seq(1,20,1)) +
+  scale_y_continuous(limits= c(0, 52), breaks=seq(0,52,10), labels = function(x) paste0(x, "%")) +
+  theme(text=element_text(family="Source Sans Pro"),
+        plot.title = element_text(colour = "#a6a6a4", size=13),
+        panel.border = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(size=.1, color="gray78"),
+        axis.title.x = element_text(vjust=-2),
+        legend.title = element_blank(),
+        legend.text=element_text(size=11),
+        legend.position = "bottom") +
+  labs(title="Figure 3B  |  Number of isoform usage per condition",
+       x="Number of isoforms",
+       y="Relative frequency (percentage)")
+ggsave(file=paste(outdir, "/DGE_TrPrcPerCondition.png.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 
 # ########### NUMBER OF ISOFORMS PER FOLD CHANGE ###########
 # num_of_isoforms_plot <- function(mat, who){

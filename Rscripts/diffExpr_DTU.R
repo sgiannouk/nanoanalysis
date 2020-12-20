@@ -1,246 +1,174 @@
 ### Stavros Giannoukakos ###
-### ONT ANALYSIS FOR DIFFERENTIAL TRANSCRIPT USAGE (DTU) 
+### ONT ANALYSIS FOR DIFFERENTIAL TRANSCRIPT USAGE (DEU) AND DIFFERENTIAL EXON USAGE (DEU)
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 7) {
+if (length(args) == 5) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
   # CSV file used for running TALON
   input_groups <- args[2]
-  # Output direcotry where all stats will be saves
+  # Output directory where all stats will be saved
   main_outdir <- args[3]
-  # Minimum number of total mapped sequence reads 
-  # for a gene isoform to be considered
-  minFeatureExpr <- as.numeric(args[4])
-  # Adjusted p-value threshold for differential expression analysis
-  adjPValueThreshold <- as.numeric(args[5])
-  # Minimum required log2 fold change for differential expression analysis
-  lfcThreshold <- as.numeric(args[6])
-  # Number of cores to be used for the differential expression analysis
-  threads <- as.numeric(args[7])
+  # Fasta file with spliced exons for each transcript
+  ref_transcriptome <- args[4]
+  # Transcriptome annotation from the TALON database
+  ref_annotation <- args[5]
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filt_talon_abundance.csv"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/new_filter/filt_talon_abundance.csv"
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
-# minFeatureExpr <- 10  # Minimum feature counts
-# adjPValueThreshold <- 0.01
-# lfcThreshold <- 1
-# threads <- 2
+# ref_transcriptome <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/new_filter/reference_transcriptome.fasta"
+# ref_annotation <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/new_filter/database_talon.gtf"
+
+library("IsoformSwitchAnalyzeR")
+options(scipen = 999)
 
 
-library("tidyr")
-library("stageR")
-library("DEXSeq")
-library("DRIMSeq")
-library("ggplot2")
-library("BiocParallel")
-BPPARAM = MulticoreParam(workers=threads)
+##### DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR #####
+print("RUNNING DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR")
 
-
-
-##### DIFFERENTIAL TRANSCRIPT USAGE (DTU) ANALYSIS USING DRIMSEQ/DEXSEQ/STAGER #####
-print("RUNNING DIFFERENTIAL TRANSCRIPT USAGE (DTU) ANALYSIS USING DRIMSEQ/DEXSEQ/STAGER")
-
-outdir <- file.path(main_outdir, "DiffTranscriptUsage")
+outdir <- file.path(main_outdir, "DiffTranscriptUsage_NEWWWW")
 dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 
-# Input the filtered expression matrix
-expr_file <- read.csv(matrix)
-print(paste("Total number of unique genes:", length(unique(expr_file$annot_gene_id)), sep=" " ))
-print(paste("Total number of unique trancripts:", length(unique(expr_file$annot_transcript_id)), sep=" " ))
-
-# Obtain number of input samples
-n <- length(expr_file[ ,10:length(expr_file)])
-print(paste("Total number of input samples:", n, sep=" " ))
 
 # Reading input csv file containing the groups
-group_samples <- read.csv(input_groups, header=F)[ ,1:3]
-group_samples <- group_samples[order(group_samples$V2), ] # Order data frame
-
+group_samples <- data.frame(readr::read_csv(file = input_groups, col_names=F)[ ,1:2])
+colnames(group_samples) <- c("sampleID","condition")
+group_samples <- group_samples[order(group_samples$condition), ] # Order data frame
 # Preparing a dataframe containing information about the samples 
-group_samples <- data.frame(sample_id = group_samples$V1, condition = group_samples$V2, batch=group_samples$V3)
-
 sampletypevalues <- factor(unique(group_samples$condition)) # Obtaining the sample groups
-print(paste("Total number of input groups: ", length(sampletypevalues)," (", sampletypevalues[1], " and ", sampletypevalues[2],")", sep="" ))
 
 
-# Obtaining the counts table
-matfile <- expr_file[ ,c(2,1,10:length(expr_file))]  # Obtaining only the annot_gene_id and the counts
-colnames(matfile)[1:2] <- c("feature_id","gene_id")
-# Create a dmDSdata object that is the starting point of DRIMSeq
-drimseq <- dmDSdata(counts = matfile, samples = group_samples)
-print("General input stats:")
-print(drimseq)   # General stats
+# Importing the talon filtered matrix
+matfile <- data.frame(readr::read_csv(file = matrix))
+rownames(matfile) <- matfile$annot_transcript_id
+tallonCols <- c("annot_gene_id",
+                "annot_transcript_id",
+                "annot_gene_name",
+                "annot_transcript_name",
+                "n_exons",
+                "length",
+                "gene_novelty",
+                "transcript_novelty",
+                "ISM_subtype")
+
+# Removing the annotation columns
+expression <- matfile[ ,setdiff(colnames(matfile), tallonCols)]
+
+### Create the switchAnalyzeRlist with all necessary files
+talonSwitch <- importRdata(isoformCountMatrix   = expression,
+                           designMatrix         = group_samples,
+                           isoformExonAnnoation = ref_annotation,
+                           isoformNtFasta       = ref_transcriptome)
+summary(talonSwitch)
+rm(expression, matfile, tallonCols, ref_annotation, ref_transcriptome, input_groups, matrix, main_outdir)
+
+# Pre-filtering step. Remove single isoform genes or non-expressed isoforms
+talonSwitch <- preFilter(switchAnalyzeRlist       = talonSwitch,
+                         # geneExpressionCutoff     = 5,
+                         removeSingleIsoformGenes = TRUE)
+
+talonSwitch <- isoformSwitchAnalysisPart1(switchAnalyzeRlist   = talonSwitch,
+                                          switchTestMethod     = 'DRIMSeq',
+                                          orfMethod            = "longest",
+                                          alpha                = 0.05,
+                                          dIFcutoff            = 0.1,
+                                          pathToOutput         = outdir,
+                                          outputSequences      = TRUE, 
+                                          prepareForWebServers = FALSE)
 
 
-# Check what is the minimal number of replicates per condition
-print("Number of replicates per condition")
-print(table((DRIMSeq::samples(drimseq))$condition))
+print(extractSwitchSummary(talonSwitch))
+# Exporting the IsoformSwitchAnalyzeR test results
+write.table(talonSwitch$isoformFeatures, file=paste(outdir,"/isoformSwitchAnalysis_results.csv", sep=""), sep=",", row.names=F, quote=F)
 
-# Filtering of lowly expressed transcript
-# The parameters are the suggested by ONT
-drimseq <- dmFilter(drimseq, 
-                    min_samps_feature_expr = 1,
-                    min_feature_expr = minFeatureExpr)
+# Creating the external files that need to be filled by
 
-# Obtaining the counts after dmFiltering
-filtered_counts <- counts(drimseq)
-
-# Printing stats
-print(paste("In total ", length(unique(filtered_counts$gene_id)), 
-            " out of ", length(unique(matfile$gene_id))," genes passed the min. thresholds.",sep=""))
-print(paste("In total ", length(unique(filtered_counts$feature_id)), 
-            " out of ", length(unique(matfile$feature_id))," genes passed the min. thresholds.",sep=""))
-
-# Creating with design matrix
-if (length(unique(group_samples$batch) == 1)) {
-  design <- model.matrix( ~ condition, data = DRIMSeq::samples(drimseq))
-} else {
-  design <- model.matrix( ~ condition + batch, data = DRIMSeq::samples(drimseq)) }
-rm(n, threads, main_outdir, minFeatureExpr, matfile)
+print(paste("Pfam -- run:$ pfam_scan.pl -fasta ",outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/stavros/playground/progs/PfamScan/databases", sep=""))
+file.create(paste(outdir,"/results_pfam.txt", sep=""))
 
 
-### Differential transcript usage using DEXSeq ###
-sample.data<-DRIMSeq::samples(drimseq)  # Reformating and obtaining the metadata
-row.names(sample.data) <- sample.data$sample_id; sample.data$sample_id <- NULL
-sample.data$condition <- factor(sample.data$condition)
-count.data <- data.frame(counts(drimseq)[,-c(1:2)])  # Obtaining the read counts of the filtered data frame
+print("CPAT -- nt | http://lilab.research.bcm.edu/cpat/")
+file.create(paste(outdir,"/results_cpat.txt", sep=""))
 
-# Constructing the DEXSeqDataSet object that will store our data
-dxd <- DEXSeqDataSet(countData=count.data, 
-                     sampleData=sample.data, 
-                     design= ~sample + exon + condition:exon, 
-                     featureID=filtered_counts$feature_id, 
-                     groupID=filtered_counts$gene_id)
+print("IUPred2A -- AA | https://iupred2a.elte.hu/")
+file.create(paste(outdir,"/results_IUPred2A.txt", sep=""))
 
-# Normalisation  - DEXSeq uses the same method as DESeq and DESeq2
-dxd <- estimateSizeFactors(dxd)
-
-# Estimating the variability of the data, in order to test for differential exon usage
-dxd <- estimateDispersions(dxd, BPPARAM=BPPARAM)
-rm(sample.data, count.data)
-
-# Having the dispersion estimates and the size factors, we can now test for differential exon usage. 
-# For each gene, DEXSeq fits a generalized linear model with the formula ~sample + exon + condition:exon 
-# and compare it to the smaller model (the null model) ~ sample + exon
-dxd <- testForDEU(dxd, reducedModel=~sample + exon, BPPARAM=BPPARAM)
-
-# Estimating relative exon usage fold changes
-dxd <- estimateExonFoldChanges(dxd, fitExpToVar="condition", BPPARAM=BPPARAM)
-
-# Obtaining the intermediate and final results
-dxr <- DEXSeqResults(dxd, independentFiltering=FALSE)
-
-# # MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
-# png(paste(outdir,"/DEXSeq_MAPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-# plotMA(dxr, cex=0.8, alpha=0.05)
-# title(main = "MA-plot")
-# dev.off()
-
-# Optimising the DEXSeq results
-dxr_res <- data.frame(dxr)
-# Renaming the log2FC
-colnames(dxr_res)[10] <- "logFC"
+print("SignalP -- AA | http://www.cbs.dtu.dk/services/SignalP/")
+file.create(paste(outdir,"/results_SignalP.txt", sep=""))
 
 
-# # MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
-# logUp <- which(dxr_res$logFC >= lfcThreshold)
-# logDown <- which(dxr_res$logFC <= -lfcThreshold)
-# withStat <- which(dxr_res$padj <= adjPValueThreshold)
-# colours <- c(noDifference="dimgray", upRegulated="mediumseagreen", downRegulated="indianred3")
-# gene <- rep("noDifference", nrow(dxr_res))
-# gene[logUp[logUp %in% withStat]] <- "upRegulated"
-# gene[logDown[logDown %in% withStat]] <- "downRegulated"
-# ggplot(data.frame(dxr_res), aes(y=logFC, x=exonBaseMean)) + 
-#       geom_point(size=1.2) + 
-#       geom_hline(yintercept = -lfcThreshold, color="indianred3") + 
-#       geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
-#       theme_bw() +
-#       aes(colour=gene) + 
-#       scale_colour_manual(name="Genes", values=colours) +
-#       xlab("log(CountsPerMillion)") +
-#       ylab("log(FoldChange)") +
-#       ggtitle("MA plot - log(FC) vs. log(CPM) on gene level data")
-# ggsave(file=paste(outdir,"/DEXSeq_MAplot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+readline(prompt="Press [enter] to continue")
 
+talonSwitch <- isoformSwitchAnalysisPart2(switchAnalyzeRlist       = talonSwitch,
+                                          alpha                    = 0.05,
+                                          dIFcutoff                = 0.1,
+                                          n                        = Inf,
+                                          removeNoncodinORFs       = TRUE,
+                                          codingCutoff             = 0.5,  # For CPC2: The cutoff suggested is 0.5 for all species
+                                          pathToPFAMresultFile     = paste(outdir,"/results_pfam.txt", sep=""),
+                                          # pathToCPC2resultFile = paste(outdir,"/results_cpc2.csv", sep=""),
+                                          pathToCPATresultFile     = paste(outdir,"/results_cpat.txt", sep=""),
+                                          pathToIUPred2AresultFile = paste(outdir,"/results_IUPred2A.txt", sep=""),
+                                          pathToSignalPresultFile  = paste(outdir,"/results_SignalP.txt", sep=""),
+                                          consequencesToAnalyze    = c('intron_retention',
+                                                                       'coding_potential',
+                                                                       'ORF_seq_similarity',
+                                                                       'NMD_status',
+                                                                       'domains_identified',
+                                                                       'IDR_identified',
+                                                                       'IDR_type',
+                                                                       'signal_peptide_identified'),
+                                          pathToOutput            = outdir,
+                                          fileType                = 'png',
+                                          asFractionTotal         = FALSE,
+                                          outputPlots             = FALSE,
+                                          quiet                   = FALSE)
 
-### StageR analysis on the DEXSeq differential transcript usage results ###
-pConfirmation <- matrix(dxr$pvalue, ncol=1)
-dimnames(pConfirmation) <- list(c(dxr$featureID), c("transcript"))
-pScreen <- perGeneQValue(dxr)
-tx2gene <- data.frame(row.names = dxr$featureID , transcript = dxr$featureID, gene = dxr$groupID)
-           
-stageRObj <- stageRTx(pScreen=pScreen, pConfirmation=pConfirmation, pScreenAdjusted=TRUE, tx2gene=tx2gene)
-# Transcript-level adjusted p-values for genes not passing the screening stage are set to NA by default
-stageRObj <- stageWiseAdjustment(object=stageRObj, method="dtu", alpha=adjPValueThreshold)
-padj <- getAdjustedPValues(stageRObj, order=TRUE, onlySignificantGenes=FALSE)
+# Extracting the (top) switching genes/isoforms (with functional consequences).
+extractTopSwitches(talonSwitch, filterForConsequences = TRUE, n=Inf)
+isoswitch_genes <- extractTopSwitches(talonSwitch, filterForConsequences = TRUE, n=Inf)$gene_name
+# The number of isoform switches with predicted functional consequences 
+extractSwitchSummary(talonSwitch, filterForConsequences = TRUE)
 
-# Creating the output matrix with the stats from DEXSeq and stageR
-dexseq_results <- data.frame(dxr)
-# Choosing the necessary columns to maintain
-dexseq_results <- dexseq_results[ ,c(1,2,10,6,7)]; row.names(dexseq_results) <- NULL
-# Renaming the columns
-colnames(dexseq_results)[1:3] <- c("gene_id", "transcript_id", "log2FoldChange")
-# Merging the two data frames
-dexseq_results <- merge(dexseq_results, padj, by.x="transcript_id", by.y="txID")
-# Rearranging 
-dexseq_results$geneID <- NULL; dexseq_results <- dexseq_results[ ,c(2,1,3:7)]
-# Renaming
-colnames(dexseq_results)[6:7] <- c("padj_gene", "padj_transcript")
-# Incorporating the gene and transcript names in the data frame
-colnames(expr_file)[1:2] <- c("gene_id", "transcript_id")
-dexseq_results <- merge(dexseq_results, expr_file[ ,c(2:4)], by="transcript_id", all.x=T)
-# Rearranging
-dexseq_results <- dexseq_results[ ,c(2,1,8,9,3:7)]
-# Renaming the new columns
-colnames(dexseq_results)[3:4] <- c("gene_name", "transcript_name")
-# Incorporating the sample data in the data frame
-dexseq_results <- merge(counts(drimseq)[ ,c(1:length(counts(drimseq)))], dexseq_results, by.x=c("gene_id", "feature_id"), by.y=c("gene_id","transcript_id"))
-# Rearranging
-num <- length(group_samples$sample_id)
-idx <- length(dexseq_results)
-dexseq_results <- dexseq_results[ ,c(1, 2, num+3, num+4, 3:(2+num), (idx-4):idx)]
-# Renaming
-colnames(dexseq_results)[2] <- "transcript_id"
+for (gene_name in isoswitch_genes){
+     print(gene_name)
+     png(paste(outdir,"/switchPlot_", gene_name,".png",sep=""), units='px', height=1400, width=2900, res=290)
+     switchPlot(talonSwitch, gene=gene_name)
+     dev.off()
+}
 
-dexseq_results <- dexseq_results[order(dexseq_results$padj_gene), ]
-# Exporting the normalised results table containing all features along with the output stats  from DEXSeq and stageR
-write.table(dexseq_results, file=paste(outdir,"/",sampletypevalues[1],"VS",sampletypevalues[2],"_DEXSeqStageR_allDTU.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+png(paste(outdir,"/common_switch_consequences.png",sep=""), units='px', height=800, width=1800, res=100)
+extractConsequenceSummary(talonSwitch,
+                          consequencesToAnalyze='all',
+                          plotGenes = FALSE,
+                          asFractionTotal = FALSE,
+                          removeEmptyConsequences = TRUE,
+                          localTheme=theme_bw())
+dev.off()
 
-# Filtering out transcripts that are not showing DTU
-candidates <- union(which(dexseq_results$padj_gene <= adjPValueThreshold), which(dexseq_results$padj_transcript < adjPValueThreshold))
-dexseq_results_filt <- dexseq_results[candidates, ]
+# png(paste(outdir,"/switchPlot_", gene_name,".png",sep=""), units='px', height=900, width=1600, res=100)
+# extractConsequenceEnrichment(talonSwitch,
+#                              consequencesToAnalyze='all',
+#                              analysisOppositeConsequence = TRUE,
+#                              returnResult = FALSE)
 
-# Ordering by padj_transcript
-dexseq_results_filt <- dexseq_results_filt[order(dexseq_results_filt$padj_gene), ]
-
-# Exporting the normalised results table containing the selected features with adjusted p value lower than the user-input value
-write.table(dexseq_results_filt, file=paste(outdir,"/",sampletypevalues[1],"VS",sampletypevalues[2],"_DEXSeqStageRBelow", gsub("[.]", "", adjPValueThreshold), ".csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-rm(filtered_counts, stageRObj)
-
-# Data frame manipulation towards melting the sample counts
-dexseq_results_filt_forplot <- dexseq_results_filt[ ,!(names(dexseq_results_filt) %in% c("log2FoldChange","pvalue","padj"))]
-# Melting
-dexseq_results_filt_forplot <- dexseq_results_filt_forplot %>% gather(key='sample', value='norm_count', -gene_id, -transcript_id, -gene_name, -transcript_name, -padj_gene, -padj_transcript)
-# Adding group identity
-dexseq_results_filt_forplot$Groups <- group_samples[match(dexseq_results_filt_forplot$sample, group_samples$sample_id), ]$condition
-
-
-# Plotting genes showing DTU 
-for(gene in unique(dexseq_results_filt$gene_name)){
-    gdf <- dexseq_results_filt_forplot[which(dexseq_results_filt_forplot$gene_name==gene), ]
-    
-    ggplot(gdf, aes(x=transcript_name, y=norm_count)) + 
-           geom_boxplot(aes(fill=Groups), position="dodge") + 
-           geom_dotplot(binaxis="y", stackdir="center", dotsize=0.6, aes(fill=Groups), position="dodge") + 
-           theme_bw() +
-           scale_fill_brewer(palette="Paired") +
-           theme(axis.text.x = element_text(angle = 30,hjust=1)) +
-           labs(title=paste("Boxplots showing transcript expression\nlevels across conditions for gene", gene), x="DTUs", y="Transcript read count")
-ggsave(file=paste(outdir,"/DEXSeqStageR_DTU_", gene, ".png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)}
+# 
+# extractSplicingEnrichment(talonSwitch,
+#                           returnResult = FALSE # if TRUE returns a data.frame with the summary statistics
+# )
+# 
+# ggplot(data=talonSwitch$isoformFeatures, aes(x=dIF, y=-log10(isoform_switch_q_value))) +
+#   geom_point(aes( color=abs(dIF) > 0.1 & isoform_switch_q_value < 0.05 ), size=1 )+
+#   geom_hline(yintercept = -log10(0.05), linetype='dashed') + # default cutoff
+#   geom_vline(xintercept = c(-0.1, 0.1), linetype='dashed') + # default cutoff
+#   facet_wrap( ~ condition_2) +
+#   # facet_grid(condition_1 ~ condition_2) + # alternative to facet_wrap if you have overlapping conditions scale_color_manual('Signficant\nIsoform Switch', values = c('black','red')) +
+#   labs(x='dIF', y='-Log10 ( Isoform Switch Q Value )') +
+#   theme_bw()

@@ -41,7 +41,7 @@ Sys.setenv("plotly_api_key"="MV5szwYMXkYMTiSifC1h")
 
 
 ### EXPLORATORY ANALYSIS ###
-print("PERFORMING ON GENE LEVEL EXPLORATORY ANALYSIS")
+print("PERFORMING EXPLORATORY ANALYSIS ON A GENE LEVEL")
 
 outdir <- file.path(main_outdir, "ExploratoryAnalysis")
 dir.create(outdir, showWarnings = FALSE)
