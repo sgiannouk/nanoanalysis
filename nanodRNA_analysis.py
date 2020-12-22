@@ -1,10 +1,10 @@
 ###Stavros Giannoukakos### 
 #Version of the program
-__version__ = "v0.2.0"
+__version__ = "v0.2.1"
 
-import glob, os
 import argparse
 import subprocess
+import glob, sys, os
 from pathlib import Path
 from datetime import datetime
 from collections import Counter
@@ -338,6 +338,8 @@ class expression_analysis:
 		### Second step: Building the reference database
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 2/10 TALON - Initiating the database: in progress ..')
 		if os.path.exists(talon_database): os.remove(talon_database)
+		original = sys.stdout
+		sys.stdout = open(f'{pipeline_reports}/talon2_initialize_database-report.txt',"w")
 		talon_initialize_database = " ".join([
 		"talon_initialize_database",  # Call talon_initialize_database
 		"--f", refAnnot,  # GTF annotation containing genes, transcripts, and edges
@@ -348,7 +350,7 @@ class expression_analysis:
 		"--o", talon_database[:-3],  # Outprefix for the annotation files
 		"2>>", os.path.join(pipeline_reports, "talon2_initialize_database-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_initialize_database, shell=True)
-		
+		sys.stdout = original
 
 		### Third step: internal priming check
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/10 TALON - Run talon_label_reads on each file to compute how likely each read is to be an internal priming product: in progress ..')
@@ -364,8 +366,7 @@ class expression_analysis:
 			"--tmpDir", os.path.join(expression_analysis_dir, "tmp_label_reads"),  # Path to directory for tmp files
 			"--deleteTmp",  # Temporary directory will be removed
 			"--o", os.path.join(temp, os.path.basename(file).replace("_clean.sam",".clean")),  # Prefix for output files
-			# "2>>", os.path.join(pipeline_reports, "talon3_talon_priming_check-report.txt")
-			])  # Directory where all reports reside
+			"2>>", os.path.join(pipeline_reports, "talon3_talon_priming_check-report.txt")])  # Directory where all reports reside
 			subprocess.run(talon_priming_check, shell=True)
 		sys.stdout = original
 
@@ -380,8 +381,7 @@ class expression_analysis:
 		"--build", 'hg38',  # Genome build (i.e. hg38) to use
 		"--o", os.path.join(expression_analysis_dir, "prefilt"),  # Prefix for output files
 		"--f", csv_file,  # Dataset config file: dataset name, sample description, platform, sam file (comma-delimited)
-		# "2>>", os.path.join(pipeline_reports, "talon4_annotationNquantification-report.txt")
-		])  # Directory where all reports reside
+		"2>>", os.path.join(pipeline_reports, "talon4_annotationNquantification-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_annotation, shell=True)
 		sys.stdout = original
 
