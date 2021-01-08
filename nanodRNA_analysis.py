@@ -547,7 +547,7 @@ class expression_analysis:
 		"--build hg38",  # Genome build (hg38) to use
 		"--annot", talon_database[:-3],  # Which annotation version to use
 		"--o", f"{expression_analysis_dir}/database",  # Output
-		"--whitelist", f"{expression_analysis_dir}/filtered_isoforms_final.csv",  # Whitelist file of transcripts to include in the output
+		"--whitelist", f"{expression_analysis_dir}/final_filtered_isoforms_for_db.csv",  # Whitelist file of transcripts to include in the output
 		"2>>", os.path.join(pipeline_reports, "talonextract_exportdb-report.txt")])  # Directory where all reports reside
 		subprocess.run(talon_export_db, shell=True)
 
@@ -607,7 +607,7 @@ class expression_analysis:
 		gene_type_sum = " ".join([
 		"Rscript",  # Call Rscript
 		f"{rscripts}/transcript_type_summary.R",  # Calling the transcript_type_summary.R script
-		"{expression_analysis_dir}/perTranscript_expression_matrix.csv",  # Input matrix
+		f"{expression_analysis_dir}/perTranscript_expression_matrix.csv",  # Input matrix
 		R_analysis,  # Output dir
 		"2>>", os.path.join(pipeline_reports, "R_transcriptType_sum-report.txt")])  # Directory where all reports reside
 		subprocess.run(gene_type_sum, shell=True)
@@ -672,11 +672,11 @@ class downstream_analysis:
 									# gene_out.write(f"{readname}\t{gene_id}\t{read_type}\t{rest}\n")
 									transcript_out.write(f"{readname}\t{transcript_id}\t{read_type}\t{rest}\n")
 					
-		# 			# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
-		# 			sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir)
-		# 			with open(sample_info_transcripts, "a") as fout_tr:
-		# 				fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
-		# 			nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
+					# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
+					sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir)
+					with open(sample_info_transcripts, "a") as fout_tr:
+						fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
+					# nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
 		return
 
 	def nanotail_analysis(self, sample_info, what):
@@ -750,7 +750,8 @@ class downstream_analysis:
 		R_analysis,  # Output directory
 		f"{expression_analysis_dir}/reference_transcriptome.fasta",  # Fasta file with spliced exons for each transcript
 		f"{expression_analysis_dir}/database_talon.gtf",  # Transcriptome annotation from the TALON database
-		"2>>", os.path.join(pipeline_reports, "diffExpr_dtu_analysis-report.txt")])  # Directory where all reports reside
+		# "2>>", os.path.join(pipeline_reports, "diffExpr_dtu_analysis-report.txt")
+		])  # Directory where all reports reside
 		subprocess.run(dtu_analysis, shell=True)
 		return 
 
@@ -855,6 +856,9 @@ def summary():
 	  		(name.endswith("ribution-report.txt") and os.stat(file).st_size == (255 or 256)) or\
 	  		(name.endswith("Metrics-report.txt") and os.stat(file).st_size == 3) or\
 	  		(name.endswith("bamstats-report.txt") and os.stat(file).st_size == 24) or\
+	  		(name.endswith("R_transcriptType_sum-report.txt") and os.stat(file).st_size == 210) or\
+	  		(name.endswith("diffExpr_exploratory_analysis-report.txt") and os.stat(file).st_size == 3648) or\
+	  		(name.endswith("diffExpr_dge_analysis-report.txt") and os.stat(file).st_size == 347) or\
 	  		(name.endswith("strandness-report.txt") and os.stat(file).st_size == 205 or os.stat(file).st_size == 214) or\
 	  		 name.endswith(".r") or name.endswith("DupRate.xls") or name.endswith("duplicate_reads-report.txt"):
 				os.remove(file)
@@ -881,13 +885,13 @@ def main():
 		raw_data_dir = os.path.dirname(str(sum_file))
 		sample_id = os.path.basename(raw_data_dir)
 		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
-		print(f'\nPROCESSING SAMPLE {sample_id}')
+		# print(f'\nPROCESSING SAMPLE {sample_id}')
 
-		quality_control(sum_file, sample_id, raw_data_dir)
+		# quality_control(sum_file, sample_id, raw_data_dir)
 
-		alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 			
-		polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
 	expression_analysis()
 
