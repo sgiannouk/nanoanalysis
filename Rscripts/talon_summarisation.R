@@ -54,19 +54,20 @@ print(paste("Applying basic filtering step. Removing internal priming artefacts 
 print(paste("Total number of remaining transcripts:", filtered_transcripts, sep=" " ))
 
 # Obtaining the important annotation to export the stats 
-filt_table_overview  <- filtered_table[ ,3:11]
+filt_table_overview  <- filtered_table[ ,1:11]
 # Output the filtered expression matrix
-filtered_matrix <- filtered_table[ ,3:length(filtered_table)]
+filtered_matrix <- filtered_table[ ,1:length(filtered_table)]
 # Applying harder filters on ISM Suffix subgroup
 ISM_filt <- filtered_matrix[filtered_matrix$ISM_subtype=="Suffix", ]
-ISM_filt <- ISM_filt[which(rowSums(ISM_filt[,10:15])<40),2]
+ISM_filt <- ISM_filt[which(rowSums(ISM_filt[,12:length(ISM_filt)])<40),4]
 print(paste("Removing ",length(ISM_filt)," that did not pass the 40 counts threshold!"), sep="")
 # Define not in
 `%notin%` <- Negate(`%in%`)
 # Removing ISM Suffix transcripts that are not fulfilling the hard filter
 filtered_matrix <- filtered_matrix[filtered_matrix$annot_transcript_id %notin% ISM_filt, ]
 # Extracting the filtered abundance matrix
-write.csv(filtered_matrix, file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
+write.csv(filtered_matrix[ ,3:length(filtered_matrix)], file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
+write.csv(filtered_matrix[ ,1:2], file=paste(dirname(main_outdir),"final_filtered_isoforms_for_db.csv",sep="/"), quote=F, row.names=F)
 rm(matrix, filtered_matrix, iso_to_remain, ISM_filt)
 
 

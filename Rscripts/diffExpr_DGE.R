@@ -25,7 +25,7 @@ if (length(args) == 6) {
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
 # minGeneExpr <- 10  # Minimum gene counts
-# adjPValueThreshold <- 0.01
+# adjPValueThreshold <- 0.05
 # lfcThreshold <- 1
 
 
@@ -340,4 +340,5 @@ ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) +
   labs(title="Number of isoform usage per condition",
        x="Number of isoforms",
        y="Relative frequency (percentage)")
-ggsave(file=paste(outdir, "/DGE_TrPrcPerCondition.png.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+ggsave(file=paste(outdir, "/DGE_TrPrcPerCondition.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+
