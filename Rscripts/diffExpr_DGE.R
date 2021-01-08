@@ -21,9 +21,9 @@ if (length(args) == 6) {
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_abundance.tsv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/prefilt_talon_abundance.tsv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
 # minGeneExpr <- 10  # Minimum gene counts
 # adjPValueThreshold <- 0.01
 # lfcThreshold <- 1
@@ -41,7 +41,7 @@ options(scipen = 999)
 ##### DIFFERENTIAL GENE EXPRESSION (DGE) ANALYSIS USING DRIMSEQ/EDGER #####
 print("RUNNING DIFFERENTIAL GENE EXPRESSION (DGE) ANALYSIS USING DRIMSEQ/EDGER")
 
-outdir <- file.path(main_outdir, "DiffGeneExpr")
+outdir <- file.path(main_outdir, "diffExpr_DGE")
 dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 
@@ -328,10 +328,8 @@ ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) +
   scale_fill_manual("", values = c("#794c74", "#709fb0")) +
   theme_minimal() +
   scale_x_continuous(limits= c(0, 20), breaks=seq(1,20,1)) +
-  scale_y_continuous(limits= c(0, 52), breaks=seq(0,52,10), labels = function(x) paste0(x, "%")) +
-  theme(text=element_text(family="Source Sans Pro"),
-        plot.title = element_text(colour = "#a6a6a4", size=13),
-        panel.border = element_blank(),
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  theme(panel.border = element_blank(),
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),
         panel.grid.major.y = element_line(size=.1, color="gray78"),
@@ -339,60 +337,7 @@ ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) +
         legend.title = element_blank(),
         legend.text=element_text(size=11),
         legend.position = "bottom") +
-  labs(title="Figure 3B  |  Number of isoform usage per condition",
+  labs(title="Number of isoform usage per condition",
        x="Number of isoforms",
        y="Relative frequency (percentage)")
 ggsave(file=paste(outdir, "/DGE_TrPrcPerCondition.png.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-
-# ########### NUMBER OF ISOFORMS PER FOLD CHANGE ###########
-# num_of_isoforms_plot <- function(mat, who){
-#             # Selecting the samples from the first group
-#             selected_group1 <- cbind(gene_id=mat[ ,1], mat[ ,which(colnames(mat) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[1]])])
-#             # Removing unexpressed genes in this group (genes with 0 in all samples)
-#             selected_group1 <- selected_group1[rowSums(selected_group1[ ,which(colnames(selected_group1) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[1]])]) > 0, ]
-#             # Normalising for sequencing depth
-#             selected_group1 <- cbind(selected_group1[ ,1:2], data.frame(cpm(selected_group1[ ,3:length(selected_group1)])))
-#             # Transform to count table
-#             selected_group1 <- data.frame(plyr::count(selected_group1, "gene_id"))
-#             # Collapsing and counting transcripts
-#             selected_group1 <- data.frame(table(Var1=selected_group1$freq))
-#             selected_group1$group <- as.character(sampletypevalues[1])  # Renaming all genes to samplegroup
-#     
-#             # Selecting the samples from the second group
-#             selected_group2 <- cbind(gene_id=mat[ ,1], mat[ ,which(colnames(mat) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[2]])])
-#             # Removing unexpressed genes in this group (genes with 0 in all samples)
-#             selected_group2 <- selected_group2[rowSums(selected_group2[ ,which(colnames(selected_group2) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[2]])]) > 0, ]
-#             # Normalising for sequencing depth
-#             selected_group2 <- cbind(selected_group2[ ,1:2], data.frame(cpm(selected_group2[ ,3:length(selected_group2)])))
-#             # Transform to count table
-#             selected_group2 <- data.frame(plyr::count(selected_group2, "gene_id"))
-#             # Collapsing and counting transcripts
-#             selected_group2 <- data.frame(table(Var1=selected_group2$freq))
-#             selected_group2$group <- as.character(sampletypevalues[2])  # Renaming all genes to samplegroup
-#             # Merging the melted data frames
-#             merged_melted_tables <- rbind(selected_group1[1:55, ], selected_group2[1:55, ])
-#             write.table(merged_melted_tables, file=paste(outdir,"/table_of_NumofTrPerCondition_", who,".csv", sep=""), sep="\t", row.names = F, quote=FALSE)
-#     
-#             ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) +
-#                    geom_bar(stat = "identity", position = "dodge") +
-#                    scale_fill_manual("Groups", values = c("#66CC99", "#877598")) +
-#                    theme_bw() +
-#                    theme(legend.position="bottom") +
-#                    theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-#                    labs(title=paste(who,": Number of isoform usage per condition ((subset of up to 55 transcripts))",sep=""), x="Number of isoforms", y="Relative Frequency") +
-#              ggsave(file=paste(outdir, "/TrNumPerCondition_", who,".png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-#              rm(selected_group1, selected_group2, merged_melted_tables)
-# }
-# 
-# logUp <- rownames(edger_res_overall)[which(edger_res_overall$logFC >= lfcThreshold & edger_res_overall$FDR <= adjPValueThreshold)]
-# logUp <- data.frame(subset(expr_file, annot_gene_id %in% logUp))
-# num_of_isoforms_plot(logUp, "LogUp")
-# 
-# logDown <- rownames(edger_res_overall)[which(edger_res_overall$logFC <= -lfcThreshold & edger_res_overall$FDR <= adjPValueThreshold)]
-# logDown <- subset(expr_file, annot_gene_id %in% logDown)
-# num_of_isoforms_plot(logDown, "LogDown")
-# 
-# logNonSign <- rownames(edger_res_overall)[which(edger_res_overall$FDR > adjPValueThreshold)]
-# logNonSign <- subset(expr_file, annot_gene_id %in% logNonSign)
-# num_of_isoforms_plot(logNonSign, "LogNonSign")
-# rm(logUp, logDown, logNonSign, num_of_isoforms_plot)

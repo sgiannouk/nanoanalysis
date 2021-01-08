@@ -1,5 +1,5 @@
 ### Stavros Giannoukakos ###
-### ONT ANALYSIS FOR DIFFERENTIAL TRANSCRIPT USAGE (DEU) AND DIFFERENTIAL EXON USAGE (DEU)
+### ONT ANALYSIS FOR DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU)
 
 
 args <- commandArgs(TRUE)
@@ -19,20 +19,20 @@ if (length(args) == 5) {
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/new_filter/filt_talon_abundance.csv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
-# ref_transcriptome <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/new_filter/reference_transcriptome.fasta"
-# ref_annotation <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/new_filter/database_talon.gtf"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filt_talon_abundance.csv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
+# ref_transcriptome <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/reference_transcriptome.fasta"
+# ref_annotation <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/database_talon.gtf"
 
 library("IsoformSwitchAnalyzeR")
 options(scipen = 999)
 
 
-##### DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR #####
-print("RUNNING DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR")
+##### DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR #####
+print("RUNNING DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR")
 
-outdir <- file.path(main_outdir, "DiffTranscriptUsage_NEWWWW")
+outdir <- file.path(main_outdir, "diffExpr_DTU")
 dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 

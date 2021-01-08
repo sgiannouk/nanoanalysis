@@ -10,8 +10,8 @@ if (length(args) == 2) {
   quit()
 }
 
-# outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2"
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/perTranscript_expression_matrix.csv"
+# outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/perTranscript_expression_matrix.csv"
 
 
 library("dplyr")
@@ -51,8 +51,7 @@ geom_bar(stat = "identity", position = "stack", width = 0.5) +
 theme_bw() +
 scale_fill_manual("", values = brewer.pal(num, "Spectral")) +
 scale_y_continuous(limits= c(0, 1), breaks=seq(0,1,.1), labels = scales::percent_format(accuracy = 5L)) +
-theme(text=element_text(family="Source Sans Pro"),
-      plot.title = element_text(colour = "#a6a6a4", size=13),
+theme(plot.title = element_text(colour = "#a6a6a4", size=13),
       panel.border = element_blank(),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),

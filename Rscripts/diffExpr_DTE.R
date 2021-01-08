@@ -23,10 +23,10 @@ if (length(args) == 7) {
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/filt_talon_abundance.csv"
-# read_annot <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_read_annot.tsv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filt_talon_abundance.csv"
+# read_annot <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/prefilt_talon_read_annot.tsv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
 # minFeatureExpr <- 10  # Minimum transcript counts
 # adjPValueThreshold <- 0.05
 # lfcThreshold <- 1
@@ -45,7 +45,7 @@ options(scipen = 999)
 ##### DIFFERENTIAL TRANSCRIPT EXPRESSION (DTE) ANALYSIS USING DRIMSEQ/EDGER #####
 print("RUNNING DIFFERENTIAL TRANSCRIPT EXPRESSION (DTE) ANALYSIS USING DRIMSEQ/EDGER")
 
-outdir <- file.path(main_outdir, "DiffTranscriptExpr")
+outdir <- file.path(main_outdir, "diffExpr_DTE")
 dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 
@@ -270,84 +270,9 @@ ggplot(melt_top30_sigNorm, aes(x = transcript_name, y = value, color = group)) +
   scale_y_log10(labels = function(x) format(x, scientific = F)) +
   theme_bw() +
   scale_colour_manual(name="", values=c("#66CC99", "#877598")) +
-  theme(axis.text.x = element_text(angle = 50, hjust = 1)) +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1)) +
   theme(plot.title = element_text(hjust = 0.5)) +
   theme(legend.position="bottom") +
   labs(title="Top 30 Significant DE Transcripts", x="Transcripts", y="log10(CPM)")
 ggsave(file=paste(outdir,"/edgeR_top30MostSingificantTranscripts.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 rm(melt_top30_sigNorm, top30_sigNorm)
-
-
-### PLOTTING THE PERCENTAGE OF ISOFORMS PER NUMBER OF TRANSCRIPTS ###
-### Checking number of transcripts per condition
-
-# Create a dmDSdata object that is the starting point of DRIMSeq
-drimseq <- dmDSdata(counts = matfile, samples = group_samples)
-
-# Filtering of lowly expressed transcript
-# The parameters are the suggested by ONT
-drimseq <- dmFilter(drimseq,
-                    min_samps_gene_expr = 1,
-                    min_samps_feature_expr = 1,
-                    min_gene_expr = 2,
-                    min_feature_expr = 2)
-
-
-# Obtaining the counts after dmFiltering
-filtered_counts <- counts(drimseq)
-
-# Selecting the samples from the first group
-selected_group1 <- cbind(filtered_counts[ ,c(1,2)], filtered_counts[ ,which(colnames(filtered_counts) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[1]])])
-# Removing unexpressed genes in this group (genes with 0 in all samples)
-selected_group1 <- selected_group1[rowSums(selected_group1[ ,which(colnames(selected_group1) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[1]])]) > 0, ] 
-# Transform to count table
-selected_group1 <- data.frame(table(selected_group1$gene_id))
-# Collapsing and counting transcripts
-selected_group1 <- data.frame(table(selected_group1$Freq))
-# Normalising for total sequencing depth
-selected_group1 <- data.frame(cbind(selected_group1[ ,1], round(selected_group1[ ,2]/sum(selected_group1[ ,2])*100,3)))
-# selected_group1 <- cbind(selected_group1[ ,1], data.frame(cpm(selected_group1[ ,2])))
-colnames(selected_group1) <- c("Var1", "Freq")
-selected_group1$group <- as.character("Healthy samples")  # Renaming all genes to samplegroup
-selected_group1 <- selected_group1[order(selected_group1$Var1), ]
-
-
-# Selecting the samples from the second group
-selected_group2 <- cbind(filtered_counts[,c(1,2)], filtered_counts[ ,which(colnames(filtered_counts) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[2]])])
-# Removing unexpressed genes in this group (genes with 0 in all samples)
-selected_group2 <- selected_group2[rowSums(selected_group2[ ,which(colnames(selected_group2) %in% group_samples$sample_id[group_samples$condition==sampletypevalues[2]])]) > 0, ]
-# Transform to count table
-selected_group2 <- data.frame(table(selected_group2$gene_id))
-# Collapsing and counting transcripts
-selected_group2 <- data.frame(table(selected_group2$Freq))
-# Normalising for total sequencing depth
-selected_group2 <- data.frame(cbind(selected_group2[ ,1], round(selected_group2[ ,2]/sum(selected_group2[ ,2])*100,3)))
-# selected_group2 <- cbind(selected_group2[ ,1], data.frame(cpm(selected_group2[ ,2],log=T)))
-colnames(selected_group2) <- c("Var1", "Freq")
-selected_group2$group <- as.character("Cancer samples")  # Renaming all genes to samplegroup
-selected_group2 <- selected_group2[order(selected_group2$Var1), ]
-
-# Merging the melted data frames
-merged_melted_tables <- rbind(selected_group1[1:20,], selected_group2[1:20,])
-# merged_melted_tables$group <- gsub('Healthy samples', 'NonTransf', merged_melted_tables$group)
-# rm(selected_group1, selected_group2)
-
-ggplot(merged_melted_tables, aes(x = Var1, y = Freq, fill = group)) + 
-  geom_bar(stat = "identity", position=position_dodge(width=0.7), alpha=.9) +
-  scale_fill_manual("", values = c("#794c74", "#709fb0")) +
-  theme_minimal() +
-  scale_x_continuous(limits= c(0, 20), breaks=seq(1,20,1)) +
-  scale_y_continuous(limits= c(0, 52), breaks=seq(0,52,10), labels = function(x) paste0(x, "%")) +
-  theme(plot.title = element_text(colour = "#a6a6a4", size=13),
-        panel.border = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(size=.1, color="gray78"),
-        axis.title.x = element_text(vjust=-2),
-        legend.title = element_blank(),
-        legend.text=element_text(size=11),
-        legend.position = "bottom") +
-  labs(title="Number of isoform usage per condition",
-       x="Number of isoforms",
-       y="Relative frequency (percentage)")
-ggsave(file=paste(outdir, "/DTE_TrPrcPerCondition.png.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)

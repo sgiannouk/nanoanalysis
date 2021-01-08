@@ -19,9 +19,9 @@ if (length(args) == 5) {
   quit()
 }
 
-# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/prefilt_talon_abundance.tsv"
-# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/talon_input.csv"
-# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_2/diffExpr_analysis"
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/prefilt_talon_abundance.tsv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
 # minGeneExpr <- 10  # Minimum gene counts
 # n_top <- 100
 
@@ -43,7 +43,7 @@ Sys.setenv("plotly_api_key"="MV5szwYMXkYMTiSifC1h")
 ### EXPLORATORY ANALYSIS ###
 print("PERFORMING EXPLORATORY ANALYSIS ON A GENE LEVEL")
 
-outdir <- file.path(main_outdir, "ExploratoryAnalysis")
+outdir <- file.path(main_outdir, "diffExpr_ExplAnalysis")
 dir.create(outdir, showWarnings = FALSE)
 setwd(outdir)
 
