@@ -1,8 +1,8 @@
 ### Stavros Giannoukakos ###
-### ONT ANALYSIS / TALON summary analysis 
+### ONT ANALYSIS / TALON summary analysis v0.2.3
 
 args <- commandArgs(TRUE)
-if (length(args) == 5) {
+if (length(args) == 6) {
   # Input matrix as it is outputted from TALON
   matrix <- args[1]
   # Output direcotry
@@ -13,6 +13,8 @@ if (length(args) == 5) {
   filt_data <- args[4] 
   # file containing the talon filtered transcripts
   talon_filter <- args[5] 
+  # Min. count threshold for the ISM group
+  ism_threshold <- as.numeric(args[6])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -23,6 +25,7 @@ if (length(args) == 5) {
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
 # filt_data <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filtered_isoforms_final.csv"
 # talon_filter <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filtered_isoforms.csv"
+# ism_threshold <- 20
 
 library("dplyr")
 library("plotly")
@@ -57,17 +60,35 @@ print(paste("Total number of remaining transcripts:", filtered_transcripts, sep=
 filt_table_overview  <- filtered_table[ ,1:11]
 # Output the filtered expression matrix
 filtered_matrix <- filtered_table[ ,1:length(filtered_table)]
+
 # Applying harder filters on ISM Suffix subgroup
-ISM_filt <- filtered_matrix[filtered_matrix$ISM_subtype=="Suffix", ]
-ISM_filt <- ISM_filt[which(rowSums(ISM_filt[,12:length(ISM_filt)])<40),4]
-print(paste("Removing ",length(ISM_filt)," that did not pass the 40 counts threshold!"), sep="")
+print("Filtering out ISM group that either group does not pass the min.counts threshold.")
+# Reading input csv file (Obtaining the groups)
+groups <- read.csv(input_groups, header=F)[ ,1:2]
+groups <- groups[order(groups$V1), ]  # Order data frame
+samplegroup <- unique(groups$V2) # Obtaining the sample groups
+# Obtaining the sample group names
+group1 <- colnames(filtered_matrix[ ,which(colnames(filtered_matrix) %in% groups$V1[groups$V2==samplegroup[1]])])
+group2 <- colnames(filtered_matrix[ ,which(colnames(filtered_matrix) %in% groups$V1[groups$V2==samplegroup[2]])])
+# Applying the filtering step
+# ISM_filt <- filtered_matrix[filtered_matrix$ISM_subtype=="Suffix", ]
+ISM_filt <- filtered_matrix[filtered_matrix$transcript_novelty=="ISM" & 
+                            filtered_matrix$ISM_subtype %in% c("Suffix","Both","None"), ]
+ism_suffix_none_both <- nrow(ISM_filt)
+  
+# Applying the threshold and filtering out ISM transcripts that do not pass it
+ISM_filt <- ISM_filt[which(rowSums(ISM_filt[ ,group1]) < ism_threshold &
+                           rowSums(ISM_filt[ ,group2]) < ism_threshold), 4]
+print(paste0(length(ISM_filt),"/",ism_suffix_none_both," ISM (Suffix, Both or None) transcripts didn't pass the ",ism_threshold, " counts threshold (either group)!"), sep="")
+rm(groups, samplegroup, group1, group2)
+
 # Define not in
 `%notin%` <- Negate(`%in%`)
 # Removing ISM Suffix transcripts that are not fulfilling the hard filter
 filtered_matrix <- filtered_matrix[filtered_matrix$annot_transcript_id %notin% ISM_filt, ]
 # Extracting the filtered abundance matrix
 write.csv(filtered_matrix[ ,3:length(filtered_matrix)], file=paste(dirname(main_outdir),"filt_talon_abundance.csv",sep="/"), quote=F, row.names=F)
-write.csv(filtered_matrix[ ,1:2], file=paste(dirname(main_outdir),"final_filtered_isoforms_for_db.csv",sep="/"), quote=F, row.names=F)
+write.table(filtered_matrix[ ,1:2], file=paste(dirname(main_outdir),"final_filtered_isoforms_for_db.csv",sep="/"), quote=F, row.names=F, col.names=F, sep=",")
 rm(matrix, filtered_matrix, iso_to_remain, ISM_filt)
 
 
