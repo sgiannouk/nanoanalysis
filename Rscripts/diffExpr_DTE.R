@@ -21,12 +21,12 @@ if (length(args) == 6) {
   quit()
 }
 
-matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filt_talon_abundance.csv"
-input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
-main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
-minFeatureExpr <- 10  # Minimum transcript counts
-adjPValueThreshold <- 0.05
-lfcThreshold <- 2
+# matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filt_talon_abundance.csv"
+# input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
+# main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
+# minFeatureExpr <- 10  # Minimum transcript counts
+# adjPValueThreshold <- 0.05
+# lfcThreshold <- 2
 
 
 library("readr")
