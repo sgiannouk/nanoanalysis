@@ -26,7 +26,7 @@ if (length(args) == 6) {
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
 # minGeneExpr <- 10  # Minimum gene counts
 # adjPValueThreshold <- 0.05
-# lfcThreshold <- 1
+# lfcThreshold <- 2
 
 
 library("dplyr")
@@ -94,9 +94,10 @@ drimseq <- dmFilter(drimseq,
 # Obtaining the counts after dmFiltering
 filtered_counts <- counts(drimseq)
 
+
 # Printing stats
-print(paste("In total ", length(unique(filtered_counts$gene_id)), 
-            " out of ", length(unique(matfile$gene_id))," genes passed the min. thresholds.",sep=""))
+print(paste("In total ", length(unique(filtered_counts$gene_id)), "/", length(unique(matfile$gene_id)),
+            " genes passed the min. threshold of ", minGeneExpr," counts.",sep=""))
 
 # Creating with design matrix
 if (length(unique(group_samples$batch) == 1)) {
@@ -232,7 +233,7 @@ plot(edger_res_overall$logFC,
      ylab="-log10(adjusted p-value)",
      pch=edger_res_overall$pch, cex=0.4)
 abline(v=0)
-abline(v=c(-1,1), col="brown")
+abline(v=c(-lfcThreshold,lfcThreshold), col="brown")
 abline(h=-log10(adjPValueThreshold), col="brown")
 ## Plot the names of a reasonable number of transcripts, by selecting those begin not only significant but also having a strong effect size
 gn.selected <- (abs(edger_res_overall$logFC)>=lfcThreshold & edger_res_overall$FDR<=adjPValueThreshold)
