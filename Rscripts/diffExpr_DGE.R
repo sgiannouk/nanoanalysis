@@ -97,7 +97,7 @@ filtered_counts <- counts(drimseq)
 
 # Printing stats
 print(paste("In total ", length(unique(filtered_counts$gene_id)), "/", length(unique(matfile$gene_id)),
-            " genes passed the min. threshold of ", minGeneExpr," counts.",sep=""))
+            " genes passed the min. threshold of ", minFeatureExpr," counts.",sep=""))
 
 # Creating with design matrix
 if (length(unique(group_samples$batch) == 1)) {
@@ -256,16 +256,14 @@ melt_top30_sigNorm$group <- gsub("_[^_]+$", "", melt_top30_sigNorm$variable)
 melt_top30_sigNorm$value[melt_top30_sigNorm$value == 0] <- 0.1
 
 ggplot(melt_top30_sigNorm, aes(x = gene_name, y = value, color = group)) +
-       geom_point(size=2.5) +
+       geom_point(size=2.4, shape=15) +
        scale_y_log10(labels = function(x) format(x, scientific = F)) +
-       xlab("Genes") +
-       ylab("log10(CPM)") +
-       ggtitle("Top 30 Significant DE Genes") +
        theme_bw() +
-       scale_colour_manual(name="", values=c("#66CC99", "#877598")) +
-       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-       theme(plot.title = element_text(hjust = 0.5)) +
-       theme(legend.position="bottom")
+       scale_colour_manual(name="", values=c("#7ebdb4", "#f4a548")) +
+       theme(axis.text.x = element_text(angle = 45, hjust = 1),
+             plot.title = element_text(hjust = 0.5),
+             legend.position="bottom") + 
+       labs(title="Top 30 Significant DE Genes", x="Genes", y="log10(CPM)")
 ggsave(file=paste(outdir,"/edgeR_top30MostSingificantGenes.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 rm(melt_top30_sigNorm, top30_sigNorm)
 rm(matrix, filtered_counts, edgeR_table, edger_res, results_selected)
