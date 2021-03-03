@@ -1,4 +1,4 @@
-###Stavros Giannoukakos### 
+  ###Stavros Giannoukakos### 
 #Version of the program
 __version__ = "v0.2.1"
 
@@ -13,16 +13,25 @@ import shutil, glob, sys, os
 
 
 ont_data =  "/home/stavros/playground/ont_basecalling/guppy_v3_basecalling"
-
+### References
 refGenomeGRCh38 = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.fa"
 refGenomeGRCh38_traclean = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.edited.fa"
 refAnnot = "/home/stavros/references/reference_annotation/GRCh38_gencode.v35.primary_assembly.annotation.gtf"
 refAnnot_bed = "/home/stavros/references/reference_annotation/GRCh38_gencode.v35.primary_assembly.annotation.bed"
+### R Scripts
 rscripts = "{0}/Rscripts".format(os.path.dirname(os.path.realpath(__file__)))
+### Talon analysis
 transcriptclean = "python3 /home/stavros/playground/progs/TranscriptClean/TranscriptClean.py"  ### TranscriptClean
 sj_ref = "/home/stavros/playground/progs/TranscriptClean/GRCh38_SJs.ref"  ### TranscriptClean ref. SJ
-pfam_dir = "/home/stavros/playground/progs/PfamScan/databases"
-uniref90 = "/home/stavros/references/blast_references/blastp/uniref90.fasta"
+### Trinotate analysis
+trinity_sqlite = "/home/stavros/references/trinity_db/Trinotate.sqlite"
+pfam_db = "/home/stavros/references/trinity_db/Pfam-A.hmm"
+uniprot = "/home/stavros/references/trinity_db/uniprot_sprot.pep"
+tmhmm_exe = "/home/stavros/playground/progs/tmhmm-2.0c/bin/tmhmm"
+rnammer_exe = "/home/stavros/playground/progs/rnammer_v1.2/rnammer"
+trin_rnammer = "/home/stavros/playground/progs/Trinotate/util/rnammer_support/RnammerTranscriptome.pl"
+
+
 
 
 usage = "nanodRNA_analysis [options]"
@@ -31,7 +40,7 @@ description = "DESCRIPTION"
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, usage=usage, description=description, epilog=epilog)
 # Number of threads/CPUs to be used
-parser.add_argument('-t', '--threads', dest='threads', default=str(25), metavar='', 
+parser.add_argument('-t', '--threads', dest='threads', default=str(40), metavar='', 
                 	help="Number of threads to be used in the analysis")
 # Minimum counts for the ISM group
 parser.add_argument('-ith', '--ismTheshold', dest='ismTheshold', default=str(20), metavar='', 
@@ -787,9 +796,8 @@ class downstream_analysis:
 		
 
 
-		transdecoderORF = os.path.join(predict_product, "transdecoderORF")
-		if not os.path.exists(transdecoderORF): os.makedirs(transdecoderORF)
-
+		if not os.path.exists(predict_product): os.makedirs(predict_product)
+		os.chdir(predict_product)
 
 		# subprocess.run(f'mv {R_analysis}/diffExpr_DTE/novel_de_transcripts_for_funcAnnotation.tsv {predict_product}', shell=True)
 		novel_transcripts_de_seqs = f'{predict_product}/novel_de_transcripts_for_funcAnnotation.fasta'
@@ -810,59 +818,116 @@ class downstream_analysis:
 		# 			SeqIO.write(elm, ref_out, "fasta")
 
 		# Calling TransDecoder.LongOrfs to perform ORF prediction
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1/ TransDecoder.LongOrfs - TransDecoder identifies candidate coding regions within transcript sequences: in progress ..')
 		transdecoder_orfs = ' '.join([
 		"TransDecoder.LongOrfs",  # Calling TransDecoder.LongOrfs
 		"-t", novel_transcripts_de_seqs,  # Novel isoforms in fasta format to be analysed
-		"-O", transdecoderORF,  # Path to intended output directory
-		"2>>", os.path.join(pipeline_reports, "predproduct_transdecoderORF-report.txt")])  # Directory where all reports reside
+		"-O", predict_product,  # Path to intended output directory
+		"-m 50",  #  Minimum protein length
+		"2>>", os.path.join(pipeline_reports, "1_predproduct_transdecoderORF-report.txt")])  # Directory where all reports reside
 		# subprocess.run(transdecoder_orfs, shell=True)
 
-		# Use pfam_scan.pl to search the predicted fasta file against a library of Pfam HMMs
-		# Search the peptides for protein domains using Pfam
-		pfamHMM = ' '.join([
-		"pfam_scan.pl",  # Calling pfam_scan.pl
-		"-cpu", args.threads,  # Number of parallel CPU workers to use for multithreads
-		"-fasta", f'{transdecoderORF}/longest_orfs.pep',  # Fasta file
-		"-dir", pfam_dir,  # Directory location of Pfam files
-		"-outfile", f'{transdecoderORF}/results_pfam.txt',  # Output file
-		# "2>>", os.path.join(pipeline_reports, "predproduct_pfam-report.txt")
-		])  # Directory where all reports reside
-		# subprocess.run(pfamHMM, shell=True)
-
-
-		# Search a protein database Uniref90 (slow but more comprehensive) using BLASTP
-		blastp = ' '.join([
-		"blastp",  # Calling blastp
-		"-query", f'{transdecoderORF}/longest_orfs.pep',  # Query fasta file
+		# Search a protein database Uniref90 (slow but more comprehensive) using BLASTX
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 2/ BlastX - Annotating coding regions of the novel nucleotide sequences: in progress ..')
+		blastx = ' '.join([
+		"blastx",  # Calling blastx
+		"-query", novel_transcripts_de_seqs,  # Query fasta file
 		"-num_threads", args.threads,  # Number of threads (CPUs) to use in the BLAST search
 		"-max_target_seqs 1",  # Maximum number of aligned sequences to keep
 		"-evalue 1e-5",  # Expectation value (E) threshold for saving hits
 		"-outfmt 6",  # Output formatting option, tabular
-		"-db", uniref90,  # BLAST database name (UniRef90 db)
-		"-out", f'{transdecoderORF}/results_blastp.txt',  # Output file
-		# "2>>", os.path.join(pipeline_reports, "predproduct_blastp-report.txt")
-		])  # Directory where all reports reside
-		subprocess.run(blastp, shell=True)
+		"-db", uniprot,  # BLAST database name (UniRef90 db)
+		"-out", f'{predict_product}/results_blastx.txt',  # Output file
+		"2>>", os.path.join(pipeline_reports, "2_predproduct_blastx-report.txt")])  # Directory where all reports reside
+		# subprocess.run(blastx, shell=True)
+
+		# Search a protein database Uniref90 (slow but more comprehensive) using BLASTP
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 3/ BlastP - Search a protein database Uniref90: in progress ..')
+		blastp = ' '.join([
+		"blastp",  # Calling blastp
+		"-query", f'{predict_product}/longest_orfs.pep',  # Query fasta file
+		"-num_threads", args.threads,  # Number of threads (CPUs) to use in the BLAST search
+		"-max_target_seqs 1",  # Maximum number of aligned sequences to keep
+		"-evalue 1e-5",  # Expectation value (E) threshold for saving hits
+		"-outfmt 6",  # Output formatting option, tabular
+		"-db", uniprot,  # BLAST database name (UniRef90 db)
+		"-out", f'{predict_product}/results_blastp.txt',  # Output file
+		"2>>", os.path.join(pipeline_reports, "3_predproduct_blastp-report.txt")])  # Directory where all reports reside
+		# subprocess.run(blastp, shell=True)
+
+		# Search sequence(s) against a profile database
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 4/ HMMER - Searching sequence databases for homologs of protein sequences: in progress ..')
+		hmmscan = ' '.join([
+		"hmmscan",  # Calling hmmscan
+		"--cpu", args.threads,  # Number of parallel CPU workers to use for multithreads
+		"--domtblout", f'{predict_product}/results_pfam.txt',  # Output file
+		pfam_db,  # Directory location of Pfam database file
+		f'{predict_product}/longest_orfs.pep',  # Fasta file
+		"2>>", os.path.join(pipeline_reports, "4_predproduct_hmmscan-report.txt")])  # Directory where all reports reside
+		# subprocess.run(hmmscan, shell=True)
+
+		# Predicting signal peptide and cleavage sites in gram+, gram- and eukaryotic amino acid sequences
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 5/ SignalP - Predicting the presence of signal peptides and the location of their cleavage sites in proteins: in progress ..')
+		run_signalp = ' '.join([
+		"signalp",  # Calling SignalP
+		"-batch 100000",  # Number of sequences that the tool will run simultaneously
+		"-format short",  # Output format 'short' for the predictions without plots
+		"-fasta", f'{predict_product}/longest_orfs.pep',  # Input file in fasta format
+		"-prefix", f'{predict_product}/results_signalp',  # Output file prefix
+		"2>>", os.path.join(pipeline_reports, "5_predproduct_signalp-report.txt")])  # Directory where all reports reside
+		# subprocess.run(run_signalp, shell=True)
+		subprocess.run(f'mv {predict_product}/results_signalp* {predict_product}/results_signalp.txt', shell=True)
+
+		# Prediction of transmembrane helices in proteins
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 6/ TMHMM - Predicting of transmembrane helices in proteins: in progress ..')
+		tmhmm = ' '.join([
+		tmhmm_exe,  # Calling tmhmm
+		"--short", 
+		"<", f'{predict_product}/longest_orfs.pep',  # Input file in fasta format
+		">", f'{predict_product}/results_tmhmm.txt',  # Output file
+		"2>>", os.path.join(pipeline_reports, "6_predproduct_tmhmm-report.txt")])  # Directory where all reports reside
+		# subprocess.run(tmhmm, shell=True)
+
+		# # Prediction of ribosomal RNA sub units
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 6/ RNAmmer - Prediction of ribosomal RNA sub units: in progress ..')
+		# rnammer = ' '.join([
+		# trin_rnammer,
+		# # "RnammerTranscriptome.pl",  # Calling RnammerTranscriptome.pl
+		# "--path_to_rnammer", rnammer_exe,  # Path of the RNAmmer tools
+		# "--transcriptome", novel_transcripts_de_seqs,  # Transcriptome assembly fasta file
+		# "--org_type euk",  # Input file in fasta format
+		# ">", f'{predict_product}/results_rnammer.txt',  # Output file
+		# # "2>>", os.path.join(pipeline_reports, "6_predproduct_rnammer-report.txt")
+		# ])  # Directory where all reports reside
+		# subprocess.run(rnammer, shell=True)
+
+
+		# Prediction of ribosomal RNA sub units
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 7/ Trinity - Running Trinotate: in progress ..')
+		trinotate = ' '.join([
+		f"Trinotate {trinity_sqlite} init",  # Calling Trinotate init
+		f'--gene_trans_map {R_analysis}/diffExpr_DTE/novel_de_transcripts_for_funcAnnotation.gene_trans_map',
+		f'--transcript_fasta {novel_transcripts_de_seqs}',
+		f'--transdecoder_pep {predict_product}/longest_orfs.pep',  # 
+		"2>>", os.path.join(pipeline_reports, "7_predproduct_trinotate-report.txt")])  # Directory where all reports reside
+		subprocess.run(trinotate, shell=True)
+		# Loading all results files
+		### Transdecoder protein search results:
+		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_swissprot_blastp {predict_product}/results_blastp.txt", shell=True)  # Calling Trinotate LOAD_swissprot_blastp
+		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_pfam {predict_product}/results_pfam.txt", shell=True)
+		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_tmhmm {predict_product}/results_tmhmm.txt", shell=True)
+		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_signalp {predict_product}/results_signalp.txt", shell=True)
+		### Trinity transcript search results
+		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_swissprot_blastx {predict_product}/results_blastx.txt", shell=True)
+		##subprocess.run(f"Trinotate {trinity_sqlite} LOAD_rnammer {predict_product}/results_rnammer.txt", shell=True)
 		
-		# while not os.path.exists(blastp_results):
-		# 	print("BlastP reults file does not exist..")
-		# 	print(f"Go to https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE=Proteins and use the {predict_product}/longest_orfs.pep file")
-		# 	time.sleep(5)
-
-		# if os.path.isfile(blastp_results):
-		# 	print(f'{blastp_results} found!')
+		# Output report and results
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 8/ Trinity - Extracting a detailed report and GO Annotation: in progress ..')
+		subprocess.run(f"Trinotate {trinity_sqlite} report > {predict_product}/trinotate_annotation_report.tsv", shell=True)
+		subprocess.run(f"extract_GO_assignments_from_Trinotate_xls.pl --trans --Trinotate_xls {predict_product}/trinotate_annotation_report.tsv > {predict_product}/trinotate_GO_annot.tsv", shell=True)
 
 
-		# Calling TransDecoder.Predict to perform transcriptome protein prediction
-		transdecoder_predict = ' '.join([
-		"TransDecoder.Predict",  # Calling TransDecoder.Predict
-		"-t", novel_transcripts_de_seqs,  # Novel isoforms in fasta format to be analysed
-		"--retain_pfam_hits", f'{transdecoderORF}/results_pfam.txt',  # Domain table output file from running hmmscan to search Pfam
-		"--retain_blastp_hits", f'{transdecoderORF}/results_blastp.txt',  # BlastP output in '-outfmt 6' format
-		"-O", predict_product,  # Path to intended output directory
-		# "2>>", os.path.join(pipeline_reports, "predproduct_transdecoderpredict-report.txt")
-		])  # Directory where all reports reside
-		# subprocess.run(transdecoder_predict, shell=True)
+		# os.system(f'rm -r {R_analysis}/diffExpr_DTE/*checkpoints_longorfs')
 		return
 
 	def methylation_detection(self):
@@ -990,9 +1055,9 @@ def main():
 	
 
 	# chosen_samples = ("Sample_2",  "Sample_3")
-	chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
-	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
-	num_of_samples = len(summary_files)
+	# chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
+	# summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
+	# num_of_samples = len(summary_files)
 
 	# for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
 	# 	raw_data_dir = os.path.dirname(str(sum_file))
