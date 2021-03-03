@@ -175,6 +175,8 @@ write.table(results_selected, file=paste(outdir,"/",sampletypevalues[1],"VS",sam
 list_of_de_transcripts <- results_selected[,1]  # List of all transcripts that were differentially expressed
 novel_de_transcripts <- grep('TALONT', list_of_de_transcripts, value=TRUE)  # Obtaining only the novel transcripts that were DEd
 write.table(novel_de_transcripts, file=paste(outdir,"/novel_de_transcripts_for_funcAnnotation.tsv", sep=""), sep="\t", row.names = F, col.names = F, quote=FALSE)
+map_to_gene <- results_selected[results_selected$transcript_id %in% novel_de_transcripts, c(3,1)]
+write.table(map_to_gene, file=paste(outdir,"/novel_de_transcripts_for_funcAnnotation.gene_trans_map", sep=""), sep="\t", row.names = F, col.names = F, quote=FALSE)
 
 
 
@@ -308,10 +310,10 @@ melt_top30_sigNorm$group <- gsub("_[^_]+$", "", melt_top30_sigNorm$variable)
 melt_top30_sigNorm$value[melt_top30_sigNorm$value == 0] <- 0.1
 
 ggplot(melt_top30_sigNorm, aes(x = transcript_name, y = value, color = group)) +
-  geom_point(size=2.5) +
+  geom_point(size=2.4, shape=15) +
   scale_y_log10(labels = function(x) format(x, scientific = F)) +
   theme_bw() +
-  scale_colour_manual(name="", values=c("#66CC99", "#877598")) +
+  scale_colour_manual(name="", values=c("#7ebdb4", "#f4a548")) +
   theme(axis.text.x = element_text(angle = 35, hjust = 1)) +
   theme(plot.title = element_text(hjust = 0.5)) +
   theme(legend.position="bottom") +
