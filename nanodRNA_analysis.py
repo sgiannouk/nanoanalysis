@@ -80,12 +80,14 @@ initial_qc_reports = os.path.join(analysis_dir, "reports/initial_qc_reports")
 postAlignment_reports = os.path.join(analysis_dir, "reports/post-alignment_qc_reports")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
 # Downstream analysis directories
-methylation_dir = os.path.join(analysis_dir, "methylation_analysis")
 expression_analysis_dir = os.path.join(analysis_dir, "expression_analysis")
-antisense_dir = os.path.join(expression_analysis_dir, "antisense_genes_analysis")
+isoform_fusions = os.path.join(analysis_dir, "fusion_analysis")
+antisense_dir = os.path.join(analysis_dir, "expression_analysis/antisense_genes_analysis")
 R_analysis = os.path.join(analysis_dir, "expression_analysis/R_analysis")
 polyA_analysis_dir = os.path.join(analysis_dir, "polyA_estimation")
-dte = os.path.join(R_analysis, "diffExpr_DTE")
+# Subdirectories
+methylation_dir = os.path.join(analysis_dir, "methylation_analysis")
+dte = os.path.join(analysis_dir, "expression_analysis/R_analysis/diffExpr_DTE")
 predict_product = os.path.join(R_analysis, "diffExpr_DTE/predict_isoform_productivity")
 functional_annot = os.path.join(R_analysis, "diffExpr_DTE/functional_annotation")
 temp = os.path.join(alignments_dir, "temp")
@@ -120,7 +122,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	""" Using Minimap2 to align the raw data against the reference genome """
 	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ALIGNING AGAINSTE THE REF. GENOME')
 
-
+	
 	if not os.path.exists(alignments_dir): os.makedirs(alignments_dir)
 	fastq_pass_filt = filter_veryshort_reads(fastq_pass, sample_id)  # Filter out reads shorter than 47nt
 
@@ -150,7 +152,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	subprocess.run(minimap2_genome, shell=True)
 	subprocess.run(f'samtools index -@ {args.threads} {bam_file}', shell=True)
 	
-	shutil.rmtree(temp)
+	shutil.rmtree(temp)  # Removing temorary directory
 	# mapping_qc(sample_id, seq_summary_file, bam_file)
 	return
 
@@ -386,6 +388,64 @@ def methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir):
 	# ])
 	# subprocess.run(tombo_sign, shell=True)
 	return
+
+class fusion_events:
+
+	def __init__(self, fastq_pass, sample_id):
+		self.detect_fusions(fastq_pass, sample_id)
+		# self.visualise_fusions()
+		return
+
+	def detect_fusions(self, fastq_pass, sample_id):
+		""" Using LongGF tool to detect fusion isoforms in the dRNA-Seq data """
+		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ISOFORM FUSION DETECTION')
+
+
+		if not os.path.exists(isoform_fusions): os.makedirs(isoform_fusions)
+		bamfile = self.realign(fastq_pass, sample_id)
+
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  LongGF - Analysing {sample_id} for potential fusion events: in progress ..')
+		fusion_detect = ' '.join([
+		"LongGF",  # Calling LongGF
+		bamfile,  # Input bam file
+		refAnnot,  # Reference annotation file
+		"100",  # The minimum length of an alignment record overlap with a gene
+		"50",  # The bin size during discretization
+		"100",  # A minimum length of an alignment record against the reference genome
+		">", f"{isoform_fusions}/{sample_id}_longgf_fusions.txt",
+		"2>>", os.path.join(pipeline_reports, "2_fusion_detect-report.txt")])  # Directory where all reports reside
+		subprocess.run(fusion_detect, shell=True)
+		os.system(f'rm {bamfile}')  # Removing name-sorted bam
+		return
+	
+	def realign(self, fastq_pass, sample_id):
+		fastq_pass_filt = filter_veryshort_reads(fastq_pass, sample_id)  # Filter out reads shorter than 47nt
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  LongGF/Minimap2 - Realigning {sample_id} against the reference genome: in progress ..')
+
+
+		### ALIGN THE RAW READS AGAINST THE REFERENCE GENOME
+		bamfile = os.path.join(isoform_fusions, f"{sample_id}.genome.namesort.bam")
+		minimap2_gn = " ".join([
+		"minimap2",  # Call minimap2 (v2.17-r941)
+		"-t", args.threads,  # Number of threds to use
+		"-ax splice",   # Long-read spliced alignment mode and output in SAM format (-a)
+		"-k 13",  # k-mer size
+		"-uf",  # Find canonical splicing sites GT-AG - f: transcript strand
+		refGenomeGRCh38,  # Inputting the reference genome
+		fastq_pass_filt,  # Input .fastq.gz file
+		"|", "samtools sort",  # Calling 'samtools sort' to sort the output alignment file
+		"--threads", args.threads,  # Number of threads to be used by 'samtools sort'
+		"-n",  # Sort by read name
+		"-",  # Input from standard output
+		"-o", bamfile,  # Sorted output  BAM file
+		"2>>", os.path.join(pipeline_reports, "1_fusion_alignment_minimap2-report.txt")])  # Directory where all reports reside
+		subprocess.run(minimap2_gn, shell=True)
+		return bamfile
+
+	def visualise_fusions(self):
+
+		return
+
 
 class expression_analysis:
 
@@ -789,7 +849,6 @@ class downstream_analysis:
 	def __init__(self):
 		# self.polyA_length_est_analysis()
 		# self.differential_expression_analysis()
-		self.detect_fusions()
 		return
 
 	def polyA_length_est_analysis(self):
@@ -1129,10 +1188,6 @@ class downstream_analysis:
 		"""
 		return
 
-	def detect_fusions(self):
-
-		return
-
 
 def summary():
 	
@@ -1197,23 +1252,26 @@ def main():
 	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
 	num_of_samples = len(summary_files)
 
-	# for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
-	# 	raw_data_dir = os.path.dirname(str(sum_file))
-	# 	sample_id = os.path.basename(raw_data_dir)
-	# 	fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
-	# 	print(f'\nPROCESSING SAMPLE {sample_id}')
+	for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
+		raw_data_dir = os.path.dirname(str(sum_file))
+		sample_id = os.path.basename(raw_data_dir)
+		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
+		print(f'\nPROCESSING SAMPLE {sample_id}')
 
 		# quality_control(sum_file, sample_id, raw_data_dir)
 
 		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
-			
+		
+		fusion_events(fastq_pass, sample_id)
+
 		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
 		# methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir)
 
+
 	# expression_analysis()
 
-	downstream_analysis()
+	# downstream_analysis()
 
 	# summary()
 
