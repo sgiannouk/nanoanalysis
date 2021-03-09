@@ -1,4 +1,4 @@
-  ###Stavros Giannoukakos### 
+###Stavros Giannoukakos### 
 #Version of the program
 __version__ = "v0.2.1"
 
@@ -23,14 +23,15 @@ rscripts = "{0}/Rscripts".format(os.path.dirname(os.path.realpath(__file__)))
 ### Talon analysis
 transcriptclean = "python3 /home/stavros/playground/progs/TranscriptClean/TranscriptClean.py"  ### TranscriptClean
 sj_ref = "/home/stavros/playground/progs/TranscriptClean/GRCh38_SJs.ref"  ### TranscriptClean ref. SJ
+map_antisense = "python3 /home/stavros/playground/progs/TALON/src/talon/post/map_antisense_genes_to_sense.py"
 ### Trinotate analysis
 trinity_sqlite = "/home/stavros/references/trinity_db/Trinotate.sqlite"
+pfam_dir = "/home/stavros/playground/progs/PfamScan/databases"
 pfam_db = "/home/stavros/references/trinity_db/Pfam-A.hmm"
 uniprot = "/home/stavros/references/trinity_db/uniprot_sprot.pep"
 tmhmm_exe = "/home/stavros/playground/progs/tmhmm-2.0c/bin/tmhmm"
 rnammer_exe = "/home/stavros/playground/progs/rnammer_v1.2/rnammer"
-trin_rnammer = "/home/stavros/playground/progs/Trinotate/util/rnammer_support/RnammerTranscriptome.pl"
-
+rnammerTransc = "/home/stavros/playground/progs/Trinotate/util/rnammer_support/RnammerTranscriptome.pl"
 
 
 
@@ -79,11 +80,16 @@ initial_qc_reports = os.path.join(analysis_dir, "reports/initial_qc_reports")
 postAlignment_reports = os.path.join(analysis_dir, "reports/post-alignment_qc_reports")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
 # Downstream analysis directories
+methylation_dir = os.path.join(analysis_dir, "methylation_analysis")
 expression_analysis_dir = os.path.join(analysis_dir, "expression_analysis")
+antisense_dir = os.path.join(expression_analysis_dir, "antisense_genes_analysis")
 R_analysis = os.path.join(analysis_dir, "expression_analysis/R_analysis")
 polyA_analysis_dir = os.path.join(analysis_dir, "polyA_estimation")
+dte = os.path.join(R_analysis, "diffExpr_DTE")
 predict_product = os.path.join(R_analysis, "diffExpr_DTE/predict_isoform_productivity")
+functional_annot = os.path.join(R_analysis, "diffExpr_DTE/functional_annotation")
 temp = os.path.join(alignments_dir, "temp")
+temp_fasta = os.path.join(methylation_dir, "temp")
 if not os.path.exists(pipeline_reports): os.makedirs(pipeline_reports)
 
 
@@ -315,6 +321,72 @@ def polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir):
 	subprocess.run(f'rm {polyA_analysis_dir}/*/fastq_runid*', shell=True)  # Removing index 
 	return
 
+def filter_short_reads_n_convert(sample_id, sum_file, fastq_pass, raw_data_dir):
+	# Remove reads with length smaller than 47 nucleotides
+	if not os.path.exists(temp_fasta): os.makedirs(temp_fasta)
+	fasta_out = f'{temp_fasta}/{sample_id}.filt.fasta'
+
+	# Using seqtk seq
+	preprocessing = ' '.join([
+	"seqtk seq",  # Calling seqtk seq
+	"-L 47",  # Drop sequences with length shorter than 47nt
+	"-A",  # Force FASTA output
+	fastq_pass,  # Input fastq file
+	">", fasta_out])
+	# subprocess.run(preprocessing, shell=True)
+
+	indexing = ' '.join([
+	"nanopolish index",  # Calling Nanopolish index
+	"--sequencing-summary", sum_file,  # the sequencing summary file from Guppy
+	"--directory", f"{raw_data_dir}/workspace/fast5_pass",  # Input BAM file
+	extracted_fastq,
+	"2>>", os.path.join(pipeline_reports, "nanopolish_index-report.txt")])
+	subprocess.run(indexing, shell=True)
+	return fasta_out
+
+def methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir):
+	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} METHYLATION DETECTION')
+	
+
+	if not os.path.exists(methylation_dir): os.makedirs(methylation_dir)
+	
+
+
+	# 1. Align nanopore events to reference k-mers
+	fasta_pass_filt = filter_short_reads_n_convert(sample_id, sum_file, fastq_pass, raw_data_dir)
+	eventalign = " ".join([
+	"nanopolish eventalign",  # Calling nanopolish eventalign
+	"--threads", args.threads,  # Use NUM threads
+	"--reads", f"{fasta_pass_filt}",  # The 2D ONT reads are in fasta FILE
+	"--bam", f"{alignments_dir}/{sample_id}.genome.bam",  # The reads aligned to the genome assembly are in bam
+	"--genome", refGenomeGRCh38,  # The genome we are computing a consensus for is in FILE
+	"--summary", f"{methylation_dir}/{sample_id}_summary.txt",  # Summarize the alignment of each read/strand
+	# "2>>", os.path.join(pipeline_reports, "1_methylation_eventalign-report.txt")
+	])
+	subprocess.run(eventalign, shell=True)
+
+
+	# # 2. Calling xpore-dataprep to prepare the data for analysis
+	# xpore_dataprep = " ".join([
+	# "xpore-dataprep",  # Calling xpore-dataprep
+	# "--species homo_sapiens",  # Species for ensembl gene-transcript mapping
+	# "--n_processes", args.threads,  # Number of threads to be used
+	# "--out_dir", methylation_dir,  # output directory
+	# # "2>>", os.path.join(pipeline_reports, "tombo_methylation-report.txt")
+	# ])
+	# # subprocess.run(xpore_dataprep, shell=True)
+
+	# # 3. Output reference sequence around most significantly modified sites
+	# tombo_sign = " ".join([
+	# "tombo text_output signif_sequence_context",  # Indexing the concat_samples.bam file
+	# "--fast5-basedirs", dirs,  # Directory containing fast5 files
+	# "--statistics-filename", os.path.join(methylation_dir,"{0}.tombo.stats".format(sample_id)),
+	# "--sequences-filename",  os.path.join(methylation_dir,"{0}.tombo_significant_regions.fasta".format(sample_id)),
+	# # "2>>", os.path.join(pipeline_reports, "tombo_significants-report.txt")
+	# ])
+	# subprocess.run(tombo_sign, shell=True)
+	return
+
 class expression_analysis:
 
 	def __init__(self):
@@ -489,10 +561,13 @@ class expression_analysis:
 			"2>>", os.path.join(pipeline_reports, "talon10_generate_report-report.txt")])  # Directory where all reports reside
 			subprocess.run(talon_report, shell=True)
 
-		# ### Removing unnecessary directories and files
+		self.extract_talon_database(talon_database, reference_fasta)  # Extract Talon database in gtf and fasta format
+		# Examining the antisense isoforms
+		self.examine_antisense(talon_database)
+		
+		### Removing unnecessary directories and files
 		subprocess.run(f"rm -r {temp}", shell=True)  
 		subprocess.run("rm -r talon_tmp", shell=True)
-		self.extract_talon_database(talon_database, reference_fasta)  # Extract Talon database in gtf and fasta format
 		return
 
 	def polyA_filtering(self, prefilt_talon_abundance, talon_read_annot, filtered_isoforms, output_file):
@@ -598,6 +673,66 @@ class expression_analysis:
 		subprocess.run(convert_db, shell=True)
 		return
 
+	def examine_antisense(self, talon_database):
+		""" In principal we know that is an antisense isoform is expressed,
+		the matching sense isoform is silent. Here we examine if this principal 
+		is being supported or not """
+		if not os.path.exists(antisense_dir): os.makedirs(antisense_dir)
+		output_matrix = f'{antisense_dir}/antisense-sense_abundance.csv'
+
+		# Calling TALON map_antisense_genes_to_sense.py to find the matching sense to the antisense isoforms
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  TALON - Examining the antisense genes: in progress ..')
+		run_map_antisense = ' '.join([
+		map_antisense,  # Calling TransDecoder.LongOrfs
+		"--db", talon_database,  #  TALON database
+		"--annot", talon_database[:-3],  # Which annotation version to use
+		"--o", f'{antisense_dir}/list_of',  # Path to the intended output directory
+		"2>>", os.path.join(pipeline_reports, "run_map_antisense-report.txt")])  # Directory where all reports reside
+		# subprocess.run(run_map_antisense, shell=True)
+
+		antisense_isoforms = {}
+		sense_isoforms = {}
+		matching_ids = {}
+		# Retrieving the isoform expression of the antisense and matching sense isoforms 
+		with open(f'{antisense_dir}/list_of_antisense_mapping.csv') as fin:
+			for line in fin:
+				if not line.startswith("antisense"):
+					antisense_isoforms[line.strip().split(",")[0]] = None
+					sense_isoforms[line.strip().split(",")[1]] = None
+					matching_ids[line.strip().split(",")[0]] = line.strip().split(",")[1]
+
+		header = None
+		with open(f'{expression_analysis_dir}/prefilt_talon_abundance.tsv') as refin:
+			for line in refin:
+				if line.startswith("gene_ID"):
+					header = line
+				else:
+					gene_id = line.strip().split("\t")[0]
+					if gene_id in antisense_isoforms:
+						if sum([int(i) for i in line.strip().split("\t")[11:]]) > 10:
+							antisense_isoforms[gene_id] = line
+						else:
+							antisense_isoforms.pop(gene_id)
+					elif gene_id in sense_isoforms:
+						if sum([int(i) for i in line.strip().split("\t")[11:]]) > 10:
+							sense_isoforms[gene_id] = line
+
+		# Outputting the final matrix with the antisense (expressed with more than 10 reads)
+		# and their matching sense genes
+		with open(output_matrix, 'w') as matout:
+			matout.write(header)
+			for antisense, sense in matching_ids.items():
+				if antisense in antisense_isoforms and sense in sense_isoforms:
+					if sense_isoforms[sense] != None:
+						matout.write(antisense_isoforms[antisense])
+						matout.write(sense_isoforms[sense])
+						matout.write("\n")
+					else:
+						matout.write(antisense_isoforms[antisense])
+						matout.write("NONE\n")
+						matout.write("\n")
+		return
+
 	def talon_visualisation(self):
 		
 		annot = {}
@@ -653,8 +788,8 @@ class downstream_analysis:
 
 	def __init__(self):
 		# self.polyA_length_est_analysis()
-		self.differential_expression_analysis()
-		# self.methylation_detection()
+		# self.differential_expression_analysis()
+		self.detect_fusions()
 		return
 
 	def polyA_length_est_analysis(self):
@@ -799,35 +934,81 @@ class downstream_analysis:
 		if not os.path.exists(predict_product): os.makedirs(predict_product)
 		os.chdir(predict_product)
 
-		# subprocess.run(f'mv {R_analysis}/diffExpr_DTE/novel_de_transcripts_for_funcAnnotation.tsv {predict_product}', shell=True)
+		# subprocess.run(f'mv {dte}/novel_de_transcripts* {predict_product}', shell=True)
 		novel_transcripts_de_seqs = f'{predict_product}/novel_de_transcripts_for_funcAnnotation.fasta'
 		novel_transcripts_de = f'{predict_product}/novel_de_transcripts_for_funcAnnotation.tsv'
+		novel_transcripts_de_mtg = f'{predict_product}/novel_de_transcripts_for_funcAnnotation.gene_trans_map'
+		transdecoder_predictions = f'{predict_product}/novel_de_transcripts_for_funcAnnotation.fasta.transdecoder.pep'
 
 
-		# novel_transcirpts = []
-		# # Obtaining the list on the novel transcripts that were differentially expressed (DTE)
-		# with open(novel_transcripts_de) as transcripts_in:
-		# 	for line in transcripts_in:
-		# 		novel_transcirpts.append(line.strip())
+		"""
+		novel_transcirpts = []
+		# Obtaining the list on the novel transcripts that were differentially expressed (DTE)
+		with open(novel_transcripts_de) as transcripts_in:
+			for line in transcripts_in:
+				novel_transcirpts.append(line.strip())
 		
-		# # Isolating their reference sequences
-		# references = SeqIO.parse(f"{expression_analysis_dir}/reference_transcriptome.fasta", "fasta")
-		# with open(novel_transcripts_de_seqs, 'w') as ref_out:
-		# 	for elm in references:
-		# 		if elm.id in novel_transcirpts:
-		# 			SeqIO.write(elm, ref_out, "fasta")
+		# Isolating their reference sequences
+		references = SeqIO.parse(f"{expression_analysis_dir}/reference_transcriptome.fasta", "fasta")
+		with open(novel_transcripts_de_seqs, 'w') as ref_out:
+			for elm in references:
+				if elm.id in novel_transcirpts:
+					SeqIO.write(elm, ref_out, "fasta")
+
 
 		# Calling TransDecoder.LongOrfs to perform ORF prediction
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1/ TransDecoder.LongOrfs - TransDecoder identifies candidate coding regions within transcript sequences: in progress ..')
 		transdecoder_orfs = ' '.join([
 		"TransDecoder.LongOrfs",  # Calling TransDecoder.LongOrfs
+		"-m 100",  #  Minimum protein length
 		"-t", novel_transcripts_de_seqs,  # Novel isoforms in fasta format to be analysed
 		"-O", predict_product,  # Path to intended output directory
-		"-m 50",  #  Minimum protein length
+		"--gene_trans_map", novel_transcripts_de_mtg,
 		"2>>", os.path.join(pipeline_reports, "1_predproduct_transdecoderORF-report.txt")])  # Directory where all reports reside
-		# subprocess.run(transdecoder_orfs, shell=True)
+		subprocess.run(transdecoder_orfs, shell=True)
 
-		# Search a protein database Uniref90 (slow but more comprehensive) using BLASTX
+		# Use pfam_scan.pl to search the predicted fasta file against a library of Pfam HMMs
+		# Search the peptides for protein domains using Pfam
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1.2/ Pfam - Searching the predicted fasta file against a library of Pfam HMMs: in progress ..')
+		pfamHMMTransd = ' '.join([
+		"pfam_scan.pl",  # Calling pfam_scan.pl
+		"-cpu", args.threads,  # Number of parallel CPU workers to use for multithreads
+		"-fasta", f'{predict_product}/longest_orfs.pep',  # Fasta file
+		"-dir", pfam_dir,  # Directory location of Pfam files
+		"-outfile", f'{predict_product}/resultsTransdecoder_pfam.txt',  # Output file
+		"2>>", os.path.join(pipeline_reports, "1_predproduct_pfamHMMTransd-report.txt")])  # Directory where all reports reside
+		subprocess.run(pfamHMMTransd, shell=True)
+		
+		# Search a protein database Uniref90 (slow but more comprehensive) using BLASTP
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1.3/ BlastP - Search a protein database UniProt: in progress ..')
+		blastpTransd = ' '.join([
+		"blastp",  # Calling blastp
+		"-query", f'{predict_product}/longest_orfs.pep',  # Query fasta file
+		"-num_threads", args.threads,  # Number of threads (CPUs) to use in the BLAST search
+		"-max_target_seqs 1",  # Maximum number of aligned sequences to keep
+		"-evalue 1e-5",  # Expectation value (E) threshold for saving hits
+		"-outfmt 6",  # Output formatting option, tabular
+		"-db", uniprot,  # BLAST database name (UniRef90 db)
+		"-out", f'{predict_product}/resultsTransdecoder_blastp.txt',  # Output file
+		"2>>", os.path.join(pipeline_reports, "1_predproduct_blastpTransd-report.txt")])  # Directory where all reports reside
+		subprocess.run(blastpTransd, shell=True)
+
+		# Calling TransDecoder.Predict to perform transcriptome protein prediction
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 1.4/ TransDecoder.Predict - Performing transcriptome protein prediction: in progress ..')
+		transdecoder_predict = ' '.join([
+		"TransDecoder.Predict",  # Calling TransDecoder.Predict
+		"--single_best_only",  # Retain only the single best orf per transcript (prioritized by homology then orf length)
+		"--retain_pfam_hits", f'{predict_product}/resultsTransdecoder_pfam.txt',  # Domain table output file from running hmmscan to search Pfam
+		"--retain_blastp_hits", f'{predict_product}/resultsTransdecoder_blastp.txt',  # BlastP output in '-outfmt 6' format
+		"-t", novel_transcripts_de_seqs,  # Novel isoforms in fasta format to be analysed
+		"-O", predict_product,  # Path to intended output directory
+		"2>>", os.path.join(pipeline_reports, "1_predproduct_transdecoderpredict-report.txt")])  # Directory where all reports reside
+		subprocess.run(transdecoder_predict, shell=True)
+		os.system(f'rm -r {dte}/*__check*')
+		os.system('rm -r {0}/start_* {0}/*.cmds {0}/*.scores {0}/longest_* {0}/resultsTransdecoder*'.format(predict_product))
+		
+
+		# Search a protein database UniProt (slow but more comprehensive) using BLASTX
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 2/ BlastX - Annotating coding regions of the novel nucleotide sequences: in progress ..')
 		blastx = ' '.join([
 		"blastx",  # Calling blastx
@@ -839,13 +1020,13 @@ class downstream_analysis:
 		"-db", uniprot,  # BLAST database name (UniRef90 db)
 		"-out", f'{predict_product}/results_blastx.txt',  # Output file
 		"2>>", os.path.join(pipeline_reports, "2_predproduct_blastx-report.txt")])  # Directory where all reports reside
-		# subprocess.run(blastx, shell=True)
+		subprocess.run(blastx, shell=True)
 
-		# Search a protein database Uniref90 (slow but more comprehensive) using BLASTP
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 3/ BlastP - Search a protein database Uniref90: in progress ..')
+		# Search a protein database UniProt (slow but more comprehensive) using BLASTP
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 3/ BlastP - Search a protein database UniProt: in progress ..')
 		blastp = ' '.join([
 		"blastp",  # Calling blastp
-		"-query", f'{predict_product}/longest_orfs.pep',  # Query fasta file
+		"-query", transdecoder_predictions,  # Query fasta file
 		"-num_threads", args.threads,  # Number of threads (CPUs) to use in the BLAST search
 		"-max_target_seqs 1",  # Maximum number of aligned sequences to keep
 		"-evalue 1e-5",  # Expectation value (E) threshold for saving hits
@@ -853,7 +1034,7 @@ class downstream_analysis:
 		"-db", uniprot,  # BLAST database name (UniRef90 db)
 		"-out", f'{predict_product}/results_blastp.txt',  # Output file
 		"2>>", os.path.join(pipeline_reports, "3_predproduct_blastp-report.txt")])  # Directory where all reports reside
-		# subprocess.run(blastp, shell=True)
+		subprocess.run(blastp, shell=True)
 
 		# Search sequence(s) against a profile database
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 4/ HMMER - Searching sequence databases for homologs of protein sequences: in progress ..')
@@ -862,9 +1043,9 @@ class downstream_analysis:
 		"--cpu", args.threads,  # Number of parallel CPU workers to use for multithreads
 		"--domtblout", f'{predict_product}/results_pfam.txt',  # Output file
 		pfam_db,  # Directory location of Pfam database file
-		f'{predict_product}/longest_orfs.pep',  # Fasta file
+		transdecoder_predictions,  # Fasta file
 		"2>>", os.path.join(pipeline_reports, "4_predproduct_hmmscan-report.txt")])  # Directory where all reports reside
-		# subprocess.run(hmmscan, shell=True)
+		subprocess.run(hmmscan, shell=True)
 
 		# Predicting signal peptide and cleavage sites in gram+, gram- and eukaryotic amino acid sequences
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 5/ SignalP - Predicting the presence of signal peptides and the location of their cleavage sites in proteins: in progress ..')
@@ -872,45 +1053,55 @@ class downstream_analysis:
 		"signalp",  # Calling SignalP
 		"-batch 100000",  # Number of sequences that the tool will run simultaneously
 		"-format short",  # Output format 'short' for the predictions without plots
-		"-fasta", f'{predict_product}/longest_orfs.pep',  # Input file in fasta format
+		"-fasta", transdecoder_predictions,  # Input file in fasta format
 		"-prefix", f'{predict_product}/results_signalp',  # Output file prefix
 		"2>>", os.path.join(pipeline_reports, "5_predproduct_signalp-report.txt")])  # Directory where all reports reside
-		# subprocess.run(run_signalp, shell=True)
+		subprocess.run(run_signalp, shell=True)
 		subprocess.run(f'mv {predict_product}/results_signalp* {predict_product}/results_signalp.txt', shell=True)
 
 		# Prediction of transmembrane helices in proteins
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 6/ TMHMM - Predicting of transmembrane helices in proteins: in progress ..')
 		tmhmm = ' '.join([
-		tmhmm_exe,  # Calling tmhmm
+		"tmhmm",  # Calling tmhmm
 		"--short", 
-		"<", f'{predict_product}/longest_orfs.pep',  # Input file in fasta format
+		f"< {transdecoder_predictions}",  # Input file in fasta format
 		">", f'{predict_product}/results_tmhmm.txt',  # Output file
 		"2>>", os.path.join(pipeline_reports, "6_predproduct_tmhmm-report.txt")])  # Directory where all reports reside
-		# subprocess.run(tmhmm, shell=True)
-
-		# # Prediction of ribosomal RNA sub units
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 6/ RNAmmer - Prediction of ribosomal RNA sub units: in progress ..')
-		# rnammer = ' '.join([
-		# trin_rnammer,
-		# # "RnammerTranscriptome.pl",  # Calling RnammerTranscriptome.pl
-		# "--path_to_rnammer", rnammer_exe,  # Path of the RNAmmer tools
-		# "--transcriptome", novel_transcripts_de_seqs,  # Transcriptome assembly fasta file
-		# "--org_type euk",  # Input file in fasta format
-		# ">", f'{predict_product}/results_rnammer.txt',  # Output file
-		# # "2>>", os.path.join(pipeline_reports, "6_predproduct_rnammer-report.txt")
-		# ])  # Directory where all reports reside
-		# subprocess.run(rnammer, shell=True)
-
-
+		subprocess.run(tmhmm, shell=True)
+		os.system(f'rm -r {predict_product}/TMHMM*')
+		
 		# Prediction of ribosomal RNA sub units
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 7/ Trinity - Running Trinotate: in progress ..')
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 7/ RNAmmer - Prediction of ribosomal RNA sub units: in progress ..')
+		run_rnammer = ' '.join([
+		rnammerTransc,  # Calling RnammerTranscriptome.pl
+		"--org_type euk",  # Selected organism
+		"--path_to_rnammer", rnammer_exe,  # Path to RNAmmer
+		"--transcriptome", novel_transcripts_de_seqs,  # Transcriptome assembly fasta file
+		">", f'{predict_product}/results_rnammer.txt',  # Output file
+		"2>>", os.path.join(pipeline_reports, "7_predproduct_rnammer-report.txt")])  # Directory where all reports reside
+		subprocess.run(run_rnammer, shell=True)
+		os.system(f'rm {predict_product}/*rnammer.gff {predict_product}/transcriptSuperScaffold*')
+		"""
+		# Functional annotation of the novel transcripts
+		self.functional_annotation(novel_transcripts_de_mtg, transdecoder_predictions, novel_transcripts_de_seqs)
+		return
+
+	def functional_annotation(self, novel_transcripts_de_mtg, transdecoder_predictions, novel_transcripts_de_seqs):
+		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} PREDICTING FUNCTIONAL ANNOTATION OF THE NOVEL ISOFORMS')
+
+
+		if not os.path.exists(functional_annot): os.makedirs(functional_annot)
+
+		"""
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Trinity - Running Trinotate: in progress ..')
 		trinotate = ' '.join([
 		f"Trinotate {trinity_sqlite} init",  # Calling Trinotate init
-		f'--gene_trans_map {R_analysis}/diffExpr_DTE/novel_de_transcripts_for_funcAnnotation.gene_trans_map',
-		f'--transcript_fasta {novel_transcripts_de_seqs}',
-		f'--transdecoder_pep {predict_product}/longest_orfs.pep',  # 
-		"2>>", os.path.join(pipeline_reports, "7_predproduct_trinotate-report.txt")])  # Directory where all reports reside
+		"--gene_trans_map", novel_transcripts_de_mtg,
+		"--transcript_fasta", novel_transcripts_de_seqs,
+		"--transdecoder_pep", transdecoder_predictions,  # 
+		"2>>", os.path.join(pipeline_reports, "8_predproduct_trinotate-report.txt")])  # Directory where all reports reside
 		subprocess.run(trinotate, shell=True)
+		
 		# Loading all results files
 		### Transdecoder protein search results:
 		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_swissprot_blastp {predict_product}/results_blastp.txt", shell=True)  # Calling Trinotate LOAD_swissprot_blastp
@@ -919,80 +1110,27 @@ class downstream_analysis:
 		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_signalp {predict_product}/results_signalp.txt", shell=True)
 		### Trinity transcript search results
 		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_swissprot_blastx {predict_product}/results_blastx.txt", shell=True)
-		##subprocess.run(f"Trinotate {trinity_sqlite} LOAD_rnammer {predict_product}/results_rnammer.txt", shell=True)
+		subprocess.run(f"Trinotate {trinity_sqlite} LOAD_rnammer {predict_product}/results_rnammer.txt", shell=True)
 		
 		# Output report and results
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} 8/ Trinity - Extracting a detailed report and GO Annotation: in progress ..')
-		subprocess.run(f"Trinotate {trinity_sqlite} report > {predict_product}/trinotate_annotation_report.tsv", shell=True)
-		subprocess.run(f"extract_GO_assignments_from_Trinotate_xls.pl --trans --Trinotate_xls {predict_product}/trinotate_annotation_report.tsv > {predict_product}/trinotate_GO_annot.tsv", shell=True)
-
-
-		# os.system(f'rm -r {R_analysis}/diffExpr_DTE/*checkpoints_longorfs')
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Trinity - Extracting a detailed report and GO Annotation: in progress ..')
+		subprocess.run(f"Trinotate {trinity_sqlite} report > {functional_annot}/trinotate_annotation_report.tsv", shell=True)
+		subprocess.run(f"extract_GO_assignments_from_Trinotate_xls.pl --trans --Trinotate_xls {functional_annot}/trinotate_annotation_report.tsv > {functional_annot}/trinotate_GO_annot.tsv", shell=True)
+		os.system(f'mv {predict_product}/*.cds {predict_product}/*.pep -t {functional_annot}')
+		
+		# Output the gene, isoform and ORF status (complete or partial) in a file
+		with open(f'{functional_annot}/novel_de_transcripts_for_funcAnnotation.fasta.transdecoder.cds', 'r') as predictin, open(f'{functional_annot}/pred_isoform_status.tsv', 'w') as fout:
+			for line in predictin:
+				if line.startswith('>'):
+					isoform = line.strip().split(" ")[0].split(".")[0].replace(">","")
+					gene = line.strip().split(" ")[1].split("~")[0]
+					orf_type = line.strip().split("type:")[1].split(" ")[0]
+					fout.write(f'{gene}\t{isoform}\t{orf_type}\n')
+		"""
 		return
 
-	def methylation_detection(self):
-		if not os.path.exists(methylation_dir): os.makedirs(methylation_dir)
-		single_fast5_data = [os.path.dirname(sum_file) for sum_file in glob.glob("/shared/projects/silvia_rna_ont_umc/basecalling/sample*_raw_data/*/")]
+	def detect_fusions(self):
 
-		# print(single_fast5_data)
-		for dirs in single_fast5_data:
-			if dirs.endswith("/0"):
-
-				sample_id = dirs.split("/")[5].split("_")[0]
-				# 1. Re-squiggling the raw reads
-				tombo_resquiggle = " ".join([
-				"tombo resquiggle",
-				dirs,
-				refGenomeGRCh38,
-				"--processes", args.threads,  # Number of threads to be used
-				"--num-most-common-errors 5",
-				# "2>>", os.path.join(pipeline_reports, "tombo_resquiggle-report.txt")
-				])
-				subprocess.run(tombo_resquiggle, shell=True)
-			
-			# 2. Calling tombo to do the methylation analysis
-			tombo_methyl = " ".join([
-			"tombo detect_modifications de_novo",  # Indexing the concat_samples.bam file
-			"--fast5-basedirs", dirs,  # Directory containing fast5 files
-			"--statistics-file-basename", os.path.join(methylation_dir,"{0}.tombo.stats".format(sample_id)),
-			"--rna",  # Explicitly select canonical RNA mode
-			"--processes", args.threads,  # Number of threads to be used
-			# "2>>", os.path.join(pipeline_reports, "tombo_methylation-report.txt")
-			])
-			subprocess.run(tombo_methyl, shell=True)
-
-			# 3. Output reference sequence around most significantly modified sites
-			tombo_sign = " ".join([
-			"tombo text_output signif_sequence_context",  # Indexing the concat_samples.bam file
-			"--fast5-basedirs", dirs,  # Directory containing fast5 files
-			"--statistics-filename", os.path.join(methylation_dir,"{0}.tombo.stats".format(sample_id)),
-			"--sequences-filename",  os.path.join(methylation_dir,"{0}.tombo_significant_regions.fasta".format(sample_id)),
-			# "2>>", os.path.join(pipeline_reports, "tombo_significants-report.txt")
-			])
-			subprocess.run(tombo_sign, shell=True)
-
-			# # 4. Use line Meme to estimate modified motifs
-			# tombo_meme = " ".join([
-			# "meme",
-	  #  		"-rna",
-	  #  		"-mod zoops", 
-			# "-oc", os.path.join(methylation_dir,"{0}_de_novo_meme".format(sample_id)),
-	  #  		os.path.join(methylation_dir,"{0}.tombo_significant_regions.fasta".format(sample_id)),
-	  #  		# "2>>", os.path.join(pipeline_reports, "tombo_meme-report.txt")
-			# ])
-			# subprocess.run(tombo_meme, shell=True)
-
-			# # 5. This plot will identify the sites in the reference
-			# tombo_plot = " ".join([
-			# "tombo plot motif_with_stats",
-			# " --fast5-basedirs", dirs,
-	  #  		"--motif CCWGG",
-	  #  		"--genome-fasta", refGenomeGRCh38,
-	  #  		"--statistics-filename", os.path.join(methylation_dir,"{0}.tombo.stats".format(sample_id)),
-	  #  		"--pdf-filename", os.path.join(methylation_dir,"{0}.tombo.pdf".format(sample_id))
-	  #  		# "2>>", os.path.join(pipeline_reports, "tombo_plot-report.txt")
-			# ])
-			# subprocess.run(tombo_plot, shell=True)
 		return
 
 
@@ -1055,9 +1193,9 @@ def main():
 	
 
 	# chosen_samples = ("Sample_2",  "Sample_3")
-	# chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
-	# summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
-	# num_of_samples = len(summary_files)
+	chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
+	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
+	num_of_samples = len(summary_files)
 
 	# for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
 	# 	raw_data_dir = os.path.dirname(str(sum_file))
@@ -1065,11 +1203,13 @@ def main():
 	# 	fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
 	# 	print(f'\nPROCESSING SAMPLE {sample_id}')
 
-	# 	quality_control(sum_file, sample_id, raw_data_dir)
+		# quality_control(sum_file, sample_id, raw_data_dir)
 
-	# 	alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 			
-	# 	polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+
+		# methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir)
 
 	# expression_analysis()
 
