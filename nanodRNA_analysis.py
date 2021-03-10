@@ -18,6 +18,7 @@ refGenomeGRCh38 = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_p
 refGenomeGRCh38_traclean = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.edited.fa"
 refAnnot = "/home/stavros/references/reference_annotation/GRCh38_gencode.v35.primary_assembly.annotation.gtf"
 refAnnot_bed = "/home/stavros/references/reference_annotation/GRCh38_gencode.v35.primary_assembly.annotation.bed"
+ensembl_db = "/home/stavros/.cache/pyensembl/GRCh38/ensembl95/agfusion.homo_sapiens.95.db"
 ### R Scripts
 rscripts = "{0}/Rscripts".format(os.path.dirname(os.path.realpath(__file__)))
 ### Talon analysis
@@ -393,7 +394,6 @@ class fusion_events:
 
 	def __init__(self, fastq_pass, sample_id):
 		self.detect_fusions(fastq_pass, sample_id)
-		# self.visualise_fusions()
 		return
 
 	def detect_fusions(self, fastq_pass, sample_id):
@@ -401,21 +401,26 @@ class fusion_events:
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ISOFORM FUSION DETECTION')
 
 
-		if not os.path.exists(isoform_fusions): os.makedirs(isoform_fusions)
-		bamfile = self.realign(fastq_pass, sample_id)
+		# if not os.path.exists(isoform_fusions): os.makedirs(isoform_fusions)
+		# bamfile = self.realign(fastq_pass, sample_id)
+		fusion_file = f'{isoform_fusions}/{sample_id}.fusions.txt'
 
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  LongGF - Analysing {sample_id} for potential fusion events: in progress ..')
-		fusion_detect = ' '.join([
-		"LongGF",  # Calling LongGF
-		bamfile,  # Input bam file
-		refAnnot,  # Reference annotation file
-		"100",  # The minimum length of an alignment record overlap with a gene
-		"50",  # The bin size during discretization
-		"100",  # A minimum length of an alignment record against the reference genome
-		">", f"{isoform_fusions}/{sample_id}_longgf_fusions.txt",
-		"2>>", os.path.join(pipeline_reports, "2_fusion_detect-report.txt")])  # Directory where all reports reside
-		subprocess.run(fusion_detect, shell=True)
-		os.system(f'rm {bamfile}')  # Removing name-sorted bam
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  LongGF - Analysing {sample_id} for potential fusion events: in progress ..')
+		# fusion_detect = ' '.join([
+		# "LongGF",  # Calling LongGF
+		# bamfile,  # Input bam file
+		# refAnnot,  # Reference annotation file
+		# "100",  # The minimum length of an alignment record overlap with a gene
+		# "50",  # The bin size during discretization
+		# "100",  # A minimum length of an alignment record against the reference genome
+		# ">", f"{isoform_fusions}/{sample_id}_longgf_fusions.txt",
+		# "2>>", os.path.join(pipeline_reports, "2_fusion_detect-report.txt")])  # Directory where all reports reside
+		# subprocess.run(fusion_detect, shell=True)
+
+		# # Extracting the final matrix containing only the necessary info of the detected fusions
+		# subprocess.run(f'grep \"SumGF\" {isoform_fusions}/{sample_id}_longgf_fusions.txt > {fusion_file}', shell=True)
+		if os.stat(fusion_file).st_size != 0: self.annotate_fusions(fusion_file, sample_id)  # Annotating the candidate fusions
+		# subprocess.run(f'rm {bamfile}', shell=True)  # Removing name-sorted bam
 		return
 	
 	def realign(self, fastq_pass, sample_id):
@@ -442,10 +447,41 @@ class fusion_events:
 		subprocess.run(minimap2_gn, shell=True)
 		return bamfile
 
+	def annotate_fusions(self, fusion_file, sample_id):
+		""" Using Annotate Gene Fusion (AGFusion) for annotating the detected fusions """
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  AGFusion - Annotating Gene Fusions detected in {sample_id}: in progress ..')
+		
+
+		fusion_annot = f'{isoform_fusions}/{sample_id}'
+		if not os.path.exists(fusion_annot): os.makedirs(fusion_annot)
+
+		with open(fusion_file) as fusin:
+			for line in fusin:
+				fusion = line.strip().split("\t")[1].split(" ")[0].replace(":","_")
+				agfusion_annotate = " ".join([
+				"agfusion annotate",  # Calling AGFusion annotate
+				"--gene5prime", line.strip().split("\t")[1].split(":")[0],  # 5' gene partner
+				"--gene3prime", line.strip().split("\t")[1].split(" ")[0].split(":")[1],  #  3' gene partner
+				"--junction5prime", line.strip().split("\t")[1].split(" ")[2].split(":")[1],  # Genomic location of predicted fuins for the 5' gene partner
+				"--junction3prime", line.strip().split("\t")[1].split(" ")[3].split(":")[1],  # Genomic location of predicted fuins for the 3' gene partner
+				"--protein_databases pfam smart superfamily tigrfam pfscan tmhmm seg ncoils prints pirsf signalp",
+				"--database", ensembl_db,  # Path to the AGFusion database
+				"--out", f"{fusion_annot}/{fusion}",  # Directory to save results
+				"--type png",  # Image file type PNG
+				"--width 10",  # Image width in inches
+				"--height 3",  # Image file height in inches
+				"--dpi 900",  # Dots per inch
+				"--fontsize 10",  # Fontsize
+				"--middlestar",  # Insert a * at the junction position for the cdna, cds, and protein sequences
+				# "--WT",  # Include this to plot wild-type
+				"2>>", os.path.join(pipeline_reports, "3_fusion_agfusion_annotate-report.txt")])
+				# subprocess.run(agfusion_annotate, shell=True)
+		# os.system(f'mv {fusion_file} {fusion_annot}')
+		return
+
 	def visualise_fusions(self):
 
 		return
-
 
 class expression_analysis:
 
@@ -1261,8 +1297,8 @@ def main():
 		# quality_control(sum_file, sample_id, raw_data_dir)
 
 		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
-		
-		fusion_events(fastq_pass, sample_id)
+		if sample_id == "Tumour_1":
+			fusion_events(fastq_pass, sample_id)
 
 		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
