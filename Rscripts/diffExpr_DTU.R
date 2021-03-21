@@ -75,7 +75,7 @@ talonSwitch <- preFilter(switchAnalyzeRlist       = talonSwitch,
                          removeSingleIsoformGenes = TRUE)
 
 talonSwitch <- isoformSwitchAnalysisPart1(switchAnalyzeRlist   = talonSwitch,
-                                          switchTestMethod     = 'DRIMSeq',
+                                          switchTestMethod     = 'DEXSeq',
                                           orfMethod            = "longest",
                                           alpha                = 0.05,
                                           dIFcutoff            = 0.1,
@@ -89,8 +89,7 @@ print(extractSwitchSummary(talonSwitch))
 write.table(talonSwitch$isoformFeatures, file=paste(outdir,"/isoformSwitchAnalysis_results.csv", sep=""), sep=",", row.names=F, quote=F)
 
 # Creating the external files that need to be filled by
-
-print(paste("Pfam -- run:$ pfam_scan.pl -fasta ",outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/stavros/playground/progs/PfamScan/databases", sep=""))
+print(paste("Pfam -- run:$ pfam_scan.pl -fasta ",outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/stavros/playground/progs/PfamScan/databases > results_pfam.txt", sep=""))
 file.create(paste(outdir,"/results_pfam.txt", sep=""))
 
 
@@ -101,6 +100,7 @@ print("IUPred2A -- AA | https://iupred2a.elte.hu/")
 file.create(paste(outdir,"/results_IUPred2A.txt", sep=""))
 
 print("SignalP -- AA | http://www.cbs.dtu.dk/services/SignalP/")
+print("SignalP -- AA | Downloads > Prediction summary")
 file.create(paste(outdir,"/results_SignalP.txt", sep=""))
 
 
