@@ -13,6 +13,10 @@ import shutil, glob, sys, os
 
 
 ont_data =  "/home/stavros/playground/ont_basecalling/guppy_v3_basecalling"
+annotation = {"NonTransf":"control", "Tumour":"treatment"}
+chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
+# chosen_samples = ("Sample_2",  "Sample_3")
+
 ### References
 refGenomeGRCh38 = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.fa"
 refGenomeGRCh38_traclean = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.edited.fa"
@@ -59,6 +63,9 @@ parser.add_argument('-adjpval', '--adjPValueThreshold', dest='adjPValueThreshold
 # Minimum required log2 fold change for differential expression analysis
 parser.add_argument('-lfc', '--lfcThreshold', dest='lfcThreshold', default=str(2), metavar='', 
                 	help="Minimum required log2 fold change for diffe-\nrential expression analysis")
+# Minimum polyA counts
+parser.add_argument('-mpa', '--minPolyA', dest='minPolyA', default=str(10), metavar='', 
+                	help="Min. number of transcripts containing a polyA estimation")
 # Top N genes to be used for the heatmap
 parser.add_argument('-n', '--n_top', dest='n_top', default=str(100), metavar='', 
                 	help="Top N genes to be used for the heatmap")
@@ -479,10 +486,6 @@ class fusion_events:
 		# os.system(f'mv {fusion_file} {fusion_annot}')
 		return
 
-	def visualise_fusions(self):
-
-		return
-
 class expression_analysis:
 
 	def __init__(self):
@@ -784,7 +787,7 @@ class expression_analysis:
 		"--annot", talon_database[:-3],  # Which annotation version to use
 		"--o", f'{antisense_dir}/list_of',  # Path to the intended output directory
 		"2>>", os.path.join(pipeline_reports, "run_map_antisense-report.txt")])  # Directory where all reports reside
-		# subprocess.run(run_map_antisense, shell=True)
+		subprocess.run(run_map_antisense, shell=True)
 
 		antisense_isoforms = {}
 		sense_isoforms = {}
@@ -883,16 +886,17 @@ class expression_analysis:
 class downstream_analysis:
 
 	def __init__(self):
-		# self.polyA_length_est_analysis()
+		# self.polyA_preprocessing()
+		self.differential_polyadelylation_analysis()
 		# self.differential_expression_analysis()
 		return
 
-	def polyA_length_est_analysis(self):
-		""" Here is where all the magic of the special filtering is taking place. 
-		Here we are using the information of the polyA length estimation to filter 
-		out novel transcripts in the ISM category. We are also performing the 
-		differential polyadelylation analysis (DPA) """
-		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} POLYA LENGTH ESTIMATION ANALYSIS')
+	def polyA_preprocessing(self):
+		""" In this method we are obtaining the output of the Nanopolish polyA function and
+		input the transcript annotation nomencalture in the files as well as additional clinical 
+		information which will be later be used for the DPA. We are also keeping the transcripts
+		that pass the DTE filters. """
+		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} POLYA ESTIMATIONS PREPROCESSING')
 		
 
 
@@ -902,6 +906,7 @@ class downstream_analysis:
 			for line in filt_tr:
 				if not line.startswith("annot_gene_id"):
 					filtered_transcripts[line.strip().split(",")[1]] = None
+
 
 		read_annot_dict = {}
 		# TALON read annotation file and saving it as a dictionary 
@@ -916,45 +921,81 @@ class downstream_analysis:
 					read_type = "{0}_{1}".format(line.strip().split("\t")[16], line.strip().split("\t")[17])
 					read_annot_dict[(sample, read)] = (transcript_id, gene_id, read_type)
 
-		for path, subdir, folder in os.walk(analysis_dir):
+		for path, subdir, folder in os.walk(polyA_analysis_dir):
 			for name in folder:
 				if name.endswith("polya_results.tsv"):
 					sample = name.split(".")[0]
-					print(sample, datetime.now().strftime("%H:%M"))
+					print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Processing the polyadenylated tail lengths of {sample}: in progress ..')
 					polyA_length_est = os.path.join(path, name)
-					with open(polyA_length_est) as fin, open(polyA_length_est.replace(".tsv",".transcripts.tsv"), "w") as transcript_out:
-						 # open(polyA_length_est.replace(".tsv",".genes.tsv"), "w") as gene_out, \
+					with open(polyA_length_est) as fin, open(polyA_length_est.replace(".tsv",".transcripts.pass.tsv"), "w") as transcript_out:
 						for i, line in enumerate(fin, 1):
 							if i == 1:
-								# gene_out.write("{0}\n".format(line.strip()))
-								transcript_out.write("{0}\n".format(line.strip()))
+								transcript_out.write("{0}\tsample\tgroup\n".format(line.strip()))
 							else:
 								readname = line.strip().split("\t")[0]
-								if (sample ,readname) in read_annot_dict:
-									# gene_id = read_annot_dict[(sample ,readname)][1]
+								if (sample ,readname) in read_annot_dict:  # and line.strip().split("\t")[9] == "PASS":
 									transcript_id = read_annot_dict[(sample ,readname)][0] 
 									read_type = read_annot_dict[(sample ,readname)][2]
 									rest = "\t".join(line.strip().split("\t")[3:])
-									# gene_out.write(f"{readname}\t{gene_id}\t{read_type}\t{rest}\n")
-									transcript_out.write(f"{readname}\t{transcript_id}\t{read_type}\t{rest}\n")
-					
-					# Writing basic info to 'polyA_data_info' for NanoTail analysis in  transcript level
-					sample_info_transcripts = "{0}/polyA_transcript_info.csv".format(polyA_analysis_dir)
-					with open(sample_info_transcripts, "a") as fout_tr:
-						fout_tr.write("{0},{1},{2}/{0}/{0}.polya_results.transcripts.tsv\n".format(sample, sample.split("_")[0], polyA_analysis_dir))
-					# nanotail_analysis(sample_info_transcripts, "transcript")  # Transcript level analysis
+									group = annotation[sample.split("_")[0]]
+									transcript_out.write(f"{readname}\t{transcript_id}\t{read_type}\t{rest}\t{sample}\t{group}\n")	
 		return
 
-	def nanotail_analysis(self, sample_info, what):
-		### Running Nanotail analysis
-		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  NanoTail - Differential polyadenilation analysis: in progress ..')
-		nanotail_analysis = " ".join([
+	def differential_polyadelylation_analysis(self):
+		""" Performing differential polyadelylation analysis (DPA) 
+		using an edited version of the the polya_diff.py script 
+	    from the pipeline-polya-diff repository of ONT. Furthermore
+	    we are using custom scripts to visualise the results and 
+	    combine with the DTE. """
+		
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  PolyA QC - Preprocessing and performing QC in the Nanopolish polyA results: in progress ..')
+		polyAqc = " ".join([
 		"Rscript",  # Call Rscript
-		f"{rscripts}/polyA_analysis.R",  # Calling the polyA_analysis.R script
-		sample_info,  # Input annotation
-		os.path.join(polyA_analysis_dir, f"{what}_analysis"),  # Output directory
-		"2>>", os.path.join(pipeline_reports, "downstream_nanotail-report.txt")])  # Directory where all reports reside
-		subprocess.run(nanotail_analysis, shell=True)
+		f"{rscripts}/polyA_prelim_analysis.R",  # Calling the polyA_prelim_analysis.R script
+		polyA_analysis_dir,  # Directory of nanopolish output
+		args.threads,  # Number of cores to be used
+		"2>>", os.path.join(pipeline_reports, "1_dpa_polyAqc-report.txt")])  # Directory where all reports reside
+		# subprocess.run(polyAqc, shell=True)
+
+
+		### Running Nanotail analysis
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Nanopore polyAdiff - Differential polyadenilation analysis: in progress ..')
+		polyAdiff = " ".join([
+		f"python3 {rscripts}/polya_diff.py",  # Calling the polya_diff.py script
+		"-i", f"{polyA_analysis_dir}/dpa_results/all_tails.tsv",  # Input file
+		"-g", f"{polyA_analysis_dir}/dpa_results/polya_diff_global.tsv",
+		"-t", f"{polyA_analysis_dir}/dpa_results/polya_diff_per_transcript.tsv",
+		"-r"  f"{polyA_analysis_dir}/dpa_results/polya_diff_report.pdf",
+		"-c", args.minPolyA,  # Min. coverage
+		# "-x",  # Plot per-transcript distributions
+		"2>>", os.path.join(pipeline_reports, "2_dpa_polyAdiff-report.txt")])  # Directory where all reports reside
+		# subprocess.run(polyAdiff, shell=True)
+
+		# Incorporating the dpa results in the DTE results
+		dte_results = glob.glob(f'{dte}/*edgeR_topTranscripts*.csv')[0]
+		dte_pda_mat = dte_results.replace(".csv", ".polyA.csv")
+
+		polyA_res  = {}
+		with open(f'{polyA_analysis_dir}/dpa_results/polya_diff_per_transcript.tsv') as polyin:
+			for line in polyin:
+				if not line.startswith(("count", "group", "contig", "\t")):
+					contig = line.strip().split("\t")[0]
+					median_control = line.strip().split("\t")[3]
+					median_treatment = line.strip().split("\t")[5]
+					median_diff = line.strip().split("\t")[4]
+					fdr = line.strip().split("\t")[8]
+					polyA_res[contig] = f'{median_control}\t{median_treatment}\t{median_diff}\t{fdr}'
+
+		with open(dte_results) as dtein, open(dte_pda_mat, 'w')as fout:
+			for line in dtein:
+				if line.startswith("transcript_id"):
+					fout.write(f'{line.strip()}\tmedian_control-polyA\tmedian_treatment-polyA\tmedian_diff-polyA\tFDR-polyA\n')
+				else:
+					if line.strip().split("\t")[0] in polyA_res:
+						polyAdetails = polyA_res[line.strip().split("\t")[0]]
+						fout.write(f'{line.strip()}\t{polyAdetails}\n')
+					else:
+						fout.write(f'{line.strip()}\t-\t-\t-\t-\n')
 		return
 
 	def differential_expression_analysis(self):
@@ -1283,22 +1324,21 @@ def summary():
 def main():
 	
 
-	# chosen_samples = ("Sample_2",  "Sample_3")
-	chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
+
 	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
 	num_of_samples = len(summary_files)
 
-	for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
-		raw_data_dir = os.path.dirname(str(sum_file))
-		sample_id = os.path.basename(raw_data_dir)
-		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
-		print(f'\nPROCESSING SAMPLE {sample_id}')
+	# for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
+	# 	raw_data_dir = os.path.dirname(str(sum_file))
+	# 	sample_id = os.path.basename(raw_data_dir)
+	# 	fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
+		# print(f'\nPROCESSING SAMPLE {sample_id}')
 
 		# quality_control(sum_file, sample_id, raw_data_dir)
 
 		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
-		if sample_id == "Tumour_1":
-			fusion_events(fastq_pass, sample_id)
+
+		# fusion_events(fastq_pass, sample_id)
 
 		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
@@ -1307,7 +1347,7 @@ def main():
 
 	# expression_analysis()
 
-	# downstream_analysis()
+	downstream_analysis()
 
 	# summary()
 
