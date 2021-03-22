@@ -78,7 +78,8 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 startTime = datetime.now()
 
 # Main folder hosting the analysis
-analysis_dir = os.path.join(script_dir, "analysis_v3.6.1")
+# analysis_dir = os.path.join(script_dir, "analysis_v3.6.1")
+analysis_dir = os.path.join(script_dir, "batch3_analysis_v3.6.1")
 # analysis_dir = os.path.join(script_dir, "batch1_analysis_v3.6.1")
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")
 alignments_dir = os.path.join(analysis_dir, "alignments")
@@ -91,13 +92,13 @@ pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
 expression_analysis_dir = os.path.join(analysis_dir, "expression_analysis")
 isoform_fusions = os.path.join(analysis_dir, "fusion_analysis")
 antisense_dir = os.path.join(analysis_dir, "expression_analysis/antisense_genes_analysis")
-R_analysis = os.path.join(analysis_dir, "expression_analysis/R_analysis")
+differential_expression = os.path.join(analysis_dir, "expression_analysis/differential_expression")
 polyA_analysis_dir = os.path.join(analysis_dir, "polyA_estimation")
 # Subdirectories
 methylation_dir = os.path.join(analysis_dir, "methylation_analysis")
-dte = os.path.join(analysis_dir, "expression_analysis/R_analysis/diffExpr_DTE")
-predict_product = os.path.join(R_analysis, "diffExpr_DTE/predict_isoform_productivity")
-functional_annot = os.path.join(R_analysis, "diffExpr_DTE/functional_annotation")
+dte = os.path.join(analysis_dir, "expression_analysis/differential_expression/diffExpr_DTE")
+predict_product = os.path.join(differential_expression, "diffExpr_DTE/predict_isoform_productivity")
+functional_annot = os.path.join(differential_expression, "diffExpr_DTE/functional_annotation")
 temp = os.path.join(alignments_dir, "temp")
 temp_fasta = os.path.join(methylation_dir, "temp")
 if not os.path.exists(pipeline_reports): os.makedirs(pipeline_reports)
@@ -120,6 +121,7 @@ def quality_control(seq_summary_file, sample_id, raw_data_dir):
 	"--color saddlebrown",  # Color for the plots
 	"--colormap PuBuGn",  # Colormap for the heatmap
 	"--prefix", os.path.join(initial_qc_reports, f"{sample_id}_"),  # Create the report in the reports directory
+	"--tsv_stats",  # Output the stats file as a properly formatted TSV
 	"--format png",  # Output format of the plots
 	"--dpi 900", # Set the dpi for saving images in high resolution
 	"2>>", os.path.join(pipeline_reports, "preprocessing_nanoPlot-report.txt")])
@@ -161,7 +163,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	subprocess.run(f'samtools index -@ {args.threads} {bam_file}', shell=True)
 	
 	shutil.rmtree(temp)  # Removing temorary directory
-	# mapping_qc(sample_id, seq_summary_file, bam_file)
+	mapping_qc(sample_id, seq_summary_file, bam_file)
 	return
 
 def filter_veryshort_reads(fastq_file, sample):
@@ -267,7 +269,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	"geneBody_coverage.py",  # Call samtools geneBody_coverage
 	"-i", bam_file,  # Input BAM file
 	"-r", refAnnot_bed,
-	f"-o", "{postAlignment_reports}/gene_coverage.{sample_id}",  # Output file
+	"-o", f"{postAlignment_reports}/gene_coverage.{sample_id}",  # Output file
 	"2>>", os.path.join(pipeline_reports, "postalignment_gene_coverage-report.txt")])
 	subprocess.run(gene_coverage, shell=True)
 
@@ -408,26 +410,26 @@ class fusion_events:
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ISOFORM FUSION DETECTION')
 
 
-		# if not os.path.exists(isoform_fusions): os.makedirs(isoform_fusions)
-		# bamfile = self.realign(fastq_pass, sample_id)
+		if not os.path.exists(isoform_fusions): os.makedirs(isoform_fusions)
+		bamfile = self.realign(fastq_pass, sample_id)
 		fusion_file = f'{isoform_fusions}/{sample_id}.fusions.txt'
 
-		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  LongGF - Analysing {sample_id} for potential fusion events: in progress ..')
-		# fusion_detect = ' '.join([
-		# "LongGF",  # Calling LongGF
-		# bamfile,  # Input bam file
-		# refAnnot,  # Reference annotation file
-		# "100",  # The minimum length of an alignment record overlap with a gene
-		# "50",  # The bin size during discretization
-		# "100",  # A minimum length of an alignment record against the reference genome
-		# ">", f"{isoform_fusions}/{sample_id}_longgf_fusions.txt",
-		# "2>>", os.path.join(pipeline_reports, "2_fusion_detect-report.txt")])  # Directory where all reports reside
-		# subprocess.run(fusion_detect, shell=True)
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  LongGF - Analysing {sample_id} for potential fusion events: in progress ..')
+		fusion_detect = ' '.join([
+		"LongGF",  # Calling LongGF
+		bamfile,  # Input bam file
+		refAnnot,  # Reference annotation file
+		"100",  # The minimum length of an alignment record overlap with a gene
+		"50",  # The bin size during discretization
+		"100",  # A minimum length of an alignment record against the reference genome
+		">", f"{isoform_fusions}/{sample_id}_longgf_fusions.txt",
+		"2>>", os.path.join(pipeline_reports, "2_fusion_detect-report.txt")])  # Directory where all reports reside
+		subprocess.run(fusion_detect, shell=True)
 
-		# # Extracting the final matrix containing only the necessary info of the detected fusions
-		# subprocess.run(f'grep \"SumGF\" {isoform_fusions}/{sample_id}_longgf_fusions.txt > {fusion_file}', shell=True)
+		# Extracting the final matrix containing only the necessary info of the detected fusions
+		subprocess.run(f'grep \"SumGF\" {isoform_fusions}/{sample_id}_longgf_fusions.txt > {fusion_file}', shell=True)
 		if os.stat(fusion_file).st_size != 0: self.annotate_fusions(fusion_file, sample_id)  # Annotating the candidate fusions
-		# subprocess.run(f'rm {bamfile}', shell=True)  # Removing name-sorted bam
+		subprocess.run(f'rm {bamfile}', shell=True)  # Removing name-sorted bam
 		return
 	
 	def realign(self, fastq_pass, sample_id):
@@ -482,8 +484,8 @@ class fusion_events:
 				"--middlestar",  # Insert a * at the junction position for the cdna, cds, and protein sequences
 				# "--WT",  # Include this to plot wild-type
 				"2>>", os.path.join(pipeline_reports, "3_fusion_agfusion_annotate-report.txt")])
-				# subprocess.run(agfusion_annotate, shell=True)
-		# os.system(f'mv {fusion_file} {fusion_annot}')
+				subprocess.run(agfusion_annotate, shell=True)
+		os.system(f'mv {fusion_file} {fusion_annot}')
 		return
 
 class expression_analysis:
@@ -501,7 +503,7 @@ class expression_analysis:
 		
 
 		talon_database = os.path.join(expression_analysis_dir, 'talon_gencode_v35.db')  ### TALON DB
-		if not os.path.exists(R_analysis): os.makedirs(R_analysis)
+		if not os.path.exists(differential_expression): os.makedirs(differential_expression)
 		temp = os.path.join(expression_analysis_dir, 'transcriptClean_temp')
 		if not os.path.exists(temp): os.makedirs(temp)
 		filtered_isoforms_final = os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv")
@@ -637,7 +639,7 @@ class expression_analysis:
 		"Rscript",  # Call Rscript
 		f"{rscripts}/talon_summarisation.R",  # Calling the talon_summarisation.R script
 		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input matrix
-		R_analysis,  # Output directory
+		differential_expression,  # Output directory
 		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
 		os.path.join(expression_analysis_dir, "filtered_isoforms_final.csv"),  # Filtered transcripts to maintain, including ISM filtering
 		os.path.join(expression_analysis_dir, "filtered_isoforms.csv"),  # Filtered transcripts to maintain, original
@@ -649,7 +651,7 @@ class expression_analysis:
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  10/10 TALON - Generating TALON report for each dataset (talon filters only): in progress ..')
 		for file in glob.glob(os.path.join(alignments_dir, "*.genome.bam")):
 			sample_name = os.path.basename(file).split(".")[0]
-			output_dir = os.path.join(R_analysis, f"talon_reports/{sample_name}_report")
+			output_dir = os.path.join(differential_expression, f"talon_reports/{sample_name}_report")
 			if not os.path.exists(output_dir): os.makedirs(output_dir)
 			talon_report = " ".join([
 			"talon_generate_report",  # Call talon_abundance
@@ -878,7 +880,7 @@ class expression_analysis:
 		"Rscript",  # Call Rscript
 		f"{rscripts}/transcript_type_summary.R",  # Calling the transcript_type_summary.R script
 		f"{expression_analysis_dir}/perTranscript_expression_matrix.csv",  # Input matrix
-		R_analysis,  # Output dir
+		differential_expression,  # Output dir
 		"2>>", os.path.join(pipeline_reports, "R_transcriptType_sum-report.txt")])  # Directory where all reports reside
 		subprocess.run(gene_type_sum, shell=True)
 		return
@@ -887,8 +889,9 @@ class downstream_analysis:
 
 	def __init__(self):
 		# self.polyA_preprocessing()
-		self.differential_polyadelylation_analysis()
-		# self.differential_expression_analysis()
+		# self.differential_polyadelylation_analysis()
+		self.differential_expression_analysis()
+		self.combine_dte_dpa_results()
 		return
 
 	def polyA_preprocessing(self):
@@ -955,7 +958,7 @@ class downstream_analysis:
 		polyA_analysis_dir,  # Directory of nanopolish output
 		args.threads,  # Number of cores to be used
 		"2>>", os.path.join(pipeline_reports, "1_dpa_polyAqc-report.txt")])  # Directory where all reports reside
-		# subprocess.run(polyAqc, shell=True)
+		subprocess.run(polyAqc, shell=True)
 
 
 		### Running Nanotail analysis
@@ -969,81 +972,55 @@ class downstream_analysis:
 		"-c", args.minPolyA,  # Min. coverage
 		# "-x",  # Plot per-transcript distributions
 		"2>>", os.path.join(pipeline_reports, "2_dpa_polyAdiff-report.txt")])  # Directory where all reports reside
-		# subprocess.run(polyAdiff, shell=True)
-
-		# Incorporating the dpa results in the DTE results
-		dte_results = glob.glob(f'{dte}/*edgeR_topTranscripts*.csv')[0]
-		dte_pda_mat = dte_results.replace(".csv", ".polyA.csv")
-
-		polyA_res  = {}
-		with open(f'{polyA_analysis_dir}/dpa_results/polya_diff_per_transcript.tsv') as polyin:
-			for line in polyin:
-				if not line.startswith(("count", "group", "contig", "\t")):
-					contig = line.strip().split("\t")[0]
-					median_control = line.strip().split("\t")[3]
-					median_treatment = line.strip().split("\t")[5]
-					median_diff = line.strip().split("\t")[4]
-					fdr = line.strip().split("\t")[8]
-					polyA_res[contig] = f'{median_control}\t{median_treatment}\t{median_diff}\t{fdr}'
-
-		with open(dte_results) as dtein, open(dte_pda_mat, 'w')as fout:
-			for line in dtein:
-				if line.startswith("transcript_id"):
-					fout.write(f'{line.strip()}\tmedian_control-polyA\tmedian_treatment-polyA\tmedian_diff-polyA\tFDR-polyA\n')
-				else:
-					if line.strip().split("\t")[0] in polyA_res:
-						polyAdetails = polyA_res[line.strip().split("\t")[0]]
-						fout.write(f'{line.strip()}\t{polyAdetails}\n')
-					else:
-						fout.write(f'{line.strip()}\t-\t-\t-\t-\n')
+		subprocess.run(polyAdiff, shell=True)
 		return
 
 	def differential_expression_analysis(self):
 		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} DIFFERENTIAL EXPRESSION ANALYSIS')
 		
 		
-		# ### First step: Exploratory analysis
-		# print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  1/4 Differential Expression - Exploratory analysis: in progress ..')
-		# expl_analysis = " ".join([
-		# "Rscript",  # Call Rscript
-		# f"{rscripts}/diffExpr_ExplAnalysis.R",  # Calling the diffExpr_ExplAnalysis.R script
-		# os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
-		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		# R_analysis,  # Output directory
-		# args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
-		# args.n_top,  # Top n_top genes for creating the heatmap
-		# "2>>", os.path.join(pipeline_reports, "diffExpr_exploratory_analysis-report.txt")])  # Directory where all reports reside
-		# subprocess.run(expl_analysis, shell=True)
+		### First step: Exploratory analysis
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  1/4 Differential Expression - Exploratory analysis: in progress ..')
+		expl_analysis = " ".join([
+		"Rscript",  # Call Rscript
+		f"{rscripts}/diffExpr_ExplAnalysis.R",  # Calling the diffExpr_ExplAnalysis.R script
+		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		differential_expression,  # Output directory
+		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
+		args.n_top,  # Top n_top genes for creating the heatmap
+		"2>>", os.path.join(pipeline_reports, "diffExpr_exploratory_analysis-report.txt")])  # Directory where all reports reside
+		subprocess.run(expl_analysis, shell=True)
 		
 
-		# ### Second step: DGE
-		# print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  2/4 Differential Expression - Differential Gene Expression (DGE) analysis using DRIMSeq/edgeR: in progress ..')
-		# dge_analysis = " ".join([
-		# "Rscript",  # Call Rscript
-		# f"{rscripts}/diffExpr_DGE.R",  # Calling the diffExpr_DGE.R script
-		# os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
-		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		# R_analysis,  # Output directory
-		# args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
-		# args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
-		# args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression
-		# "2>>", os.path.join(pipeline_reports, "diffExpr_dge_analysis-report.txt")])  # Directory where all reports reside
-		# subprocess.run(dge_analysis, shell=True)
+		### Second step: DGE
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  2/4 Differential Expression - Differential Gene Expression (DGE) analysis using DRIMSeq/edgeR: in progress ..')
+		dge_analysis = " ".join([
+		"Rscript",  # Call Rscript
+		f"{rscripts}/diffExpr_DGE.R",  # Calling the diffExpr_DGE.R script
+		os.path.join(expression_analysis_dir, "prefilt_talon_abundance.tsv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		differential_expression,  # Output directory
+		args.minGeneExpr,  # minGeneExpr - Minimum number of reads for a gene to be considered expressed
+		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
+		args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression
+		"2>>", os.path.join(pipeline_reports, "diffExpr_dge_analysis-report.txt")])  # Directory where all reports reside
+		subprocess.run(dge_analysis, shell=True)
 		
 
-		# ### Third step: DTE
-		# print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/4 Differential Expression - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..')
-		# dte_analysis = " ".join([
-		# "Rscript",  # Call Rscript
-		# f"{rscripts}/diffExpr_DTE.R",  # Calling the diffExpr_DTE.R script
-		# os.path.join(expression_analysis_dir, "filt_talon_abundance.csv"),  # Input filtered matrix
-		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		# R_analysis,  # Output directory
-		# args.minFeatureExpr,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
-		# args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
-		# args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression		
-		# "2>>", os.path.join(pipeline_reports, "diffExpr_dte_analysis-report.txt")])  # Directory where all reports reside
-		# subprocess.run(dte_analysis, shell=True)
+		### Third step: DTE
+		print(f'\n{datetime.now().strftime("%d.%m.%Y %H:%M")}  3/4 Differential Expression - Differential Transcript Expression (DTE) analysis using DRIMSeq/edgeR: in progress ..')
+		dte_analysis = " ".join([
+		"Rscript",  # Call Rscript
+		f"{rscripts}/diffExpr_DTE.R",  # Calling the diffExpr_DTE.R script
+		os.path.join(expression_analysis_dir, "filt_talon_abundance.csv"),  # Input filtered matrix
+		os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
+		differential_expression,  # Output directory
+		args.minFeatureExpr,  # minFeatureExpr - Minimum number of reads for a gene isoform to be considered
+		args.adjPValueThreshold,  # adjPValueThreshold - Adjusted p-value threshold for differential expression
+		args.lfcThreshold,  # lfcThreshold - Minimum required log2 fold change for differential expression		
+		"2>>", os.path.join(pipeline_reports, "diffExpr_dte_analysis-report.txt")])  # Directory where all reports reside
+		subprocess.run(dte_analysis, shell=True)
 		self.predict_productivity()
 
 
@@ -1054,7 +1031,7 @@ class downstream_analysis:
 		# f"{rscripts}/diffExpr_DTU.R",  # Calling the diffExpr_DTU.R script
 		# os.path.join(expression_analysis_dir, "filt_talon_abundance.csv"),  # Input filtered matrix
 		# os.path.join(expression_analysis_dir, "talon_input.csv"),  # Input annotation matrix
-		# R_analysis,  # Output directory
+		# differential_expression,  # Output directory
 		# f"{expression_analysis_dir}/reference_transcriptome.fasta",  # Fasta file with spliced exons for each transcript
 		# f"{expression_analysis_dir}/database_talon.gtf",  # Transcriptome annotation from the TALON database
 		# # "2>>", os.path.join(pipeline_reports, "diffExpr_dtu_analysis-report.txt")
@@ -1077,7 +1054,6 @@ class downstream_analysis:
 		transdecoder_predictions = f'{predict_product}/novel_de_transcripts_for_funcAnnotation.fasta.transdecoder.pep'
 
 
-		"""
 		novel_transcirpts = []
 		# Obtaining the list on the novel transcripts that were differentially expressed (DTE)
 		with open(novel_transcripts_de) as transcripts_in:
@@ -1217,7 +1193,7 @@ class downstream_analysis:
 		"2>>", os.path.join(pipeline_reports, "7_predproduct_rnammer-report.txt")])  # Directory where all reports reside
 		subprocess.run(run_rnammer, shell=True)
 		os.system(f'rm {predict_product}/*rnammer.gff {predict_product}/transcriptSuperScaffold*')
-		"""
+
 		# Functional annotation of the novel transcripts
 		self.functional_annotation(novel_transcripts_de_mtg, transdecoder_predictions, novel_transcripts_de_seqs)
 		return
@@ -1228,7 +1204,7 @@ class downstream_analysis:
 
 		if not os.path.exists(functional_annot): os.makedirs(functional_annot)
 
-		"""
+
 		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")} Trinity - Running Trinotate: in progress ..')
 		trinotate = ' '.join([
 		f"Trinotate {trinity_sqlite} init",  # Calling Trinotate init
@@ -1253,18 +1229,83 @@ class downstream_analysis:
 		subprocess.run(f"Trinotate {trinity_sqlite} report > {functional_annot}/trinotate_annotation_report.tsv", shell=True)
 		subprocess.run(f"extract_GO_assignments_from_Trinotate_xls.pl --trans --Trinotate_xls {functional_annot}/trinotate_annotation_report.tsv > {functional_annot}/trinotate_GO_annot.tsv", shell=True)
 		os.system(f'mv {predict_product}/*.cds {predict_product}/*.pep -t {functional_annot}')
-		
+
 		# Output the gene, isoform and ORF status (complete or partial) in a file
+		func_annot_dict = {}
 		with open(f'{functional_annot}/novel_de_transcripts_for_funcAnnotation.fasta.transdecoder.cds', 'r') as predictin, open(f'{functional_annot}/pred_isoform_status.tsv', 'w') as fout:
 			for line in predictin:
 				if line.startswith('>'):
 					isoform = line.strip().split(" ")[0].split(".")[0].replace(">","")
 					gene = line.strip().split(" ")[1].split("~")[0]
 					orf_type = line.strip().split("type:")[1].split(" ")[0]
+					func_annot_dict[isoform] = orf_type
 					fout.write(f'{gene}\t{isoform}\t{orf_type}\n')
-		"""
+
+		
+		annot = {}
+		with open(os.path.join(expression_analysis_dir, "database_talon.gtf")) as ref_in:
+			for i, line in enumerate(ref_in):
+				if not line.startswith("#"):
+					if line.split("\t")[2].strip() == 'transcript':
+						transcript_id = line.split("\t")[-1].split(";")[1].split(" ")[-1].strip("\"")
+						transcript_type = ["novel", line.split("\t")[-1].split(";")[4].split()[1].strip("\"").strip()][transcript_id.startswith("ENST")]
+						if transcript_type.endswith("pseudogene"):
+							transcript_type = "pseudogene"
+						elif transcript_type in ["Mt_rRNA","miRNA","snoRNA","misc_RNA","snRNA","scaRNA","rRNA","Mt_tRNA"]:
+							transcript_type = "ncRNA"
+						elif transcript_type == "ribozyme" or transcript_type.startswith("IG_") or transcript_type.startswith("TR_"):
+							transcript_type = "protein_coding"
+						elif transcript_type == "TEC":
+							transcript_type = "To_be_Confirmed"
+						annot[transcript_id] = transcript_type
+
+
+		dte_results = glob.glob(f'{dte}/*edgeR_topTranscripts*.polyA.csv')[0]
+		dte_funcannot_mat = dte_results.replace(".polyA.csv", ".funcAnnot.polyA.tsv")
+		with open(dte_results) as fin, open(dte_funcannot_mat, 'w') as fout:
+			for line in fin:
+				if line.startswith("transcript_id"):
+					fout.write(f'{line.strip()}\tfunct_annot\trna_type\n')
+				else:
+					transcript = line.strip().split("\t")[0]
+					if transcript in func_annot_dict:
+						fout.write(f'{line.strip()}\t{func_annot_dict[transcript]}\t{annot[transcript]}\n')
+					else:
+						if transcript.startswith("EN"):
+							fout.write(f'{line.strip()}\tknown-functional\t{annot[transcript]}\n')
+						else:
+							fout.write(f'{line.strip()}\tunknown\t{annot[transcript]}\n')
 		return
 
+	def combine_dte_dpa_results(self):
+		print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} COMBINING DTE AND DPA RESULTS INTO A FINAL MATRIX')
+		
+		polyA_res  = {}
+		# Creating a dictionary to save the polyA results
+		with open(f'{polyA_analysis_dir}/dpa_results/polya_diff_per_transcript.tsv') as polyin:
+			for line in polyin:
+				if not line.startswith(("count", "group", "contig", "\t")):
+					contig = line.strip().split("\t")[0]
+					median_control = line.strip().split("\t")[3]
+					median_treatment = line.strip().split("\t")[5]
+					median_diff = line.strip().split("\t")[4]
+					fdr = line.strip().split("\t")[8]
+					polyA_res[contig] = f'{median_control}\t{median_treatment}\t{median_diff}\t{fdr}'
+
+		# Creating a new file of DTE incorporating the polyA findings
+		dte_results = glob.glob(f'{dte}/*edgeR_topTranscripts*.csv')[0]
+		dte_pda_mat = dte_results.replace(".csv", ".polyA.csv")
+		with open(dte_results) as dtein, open(dte_pda_mat, 'w')as fout:
+			for line in dtein:
+				if line.startswith("transcript_id"):
+					fout.write(f'{line.strip()}\tmedian_control-polyA\tmedian_treatment-polyA\tmedian_diff-polyA\tFDR-polyA\n')
+				else:
+					if line.strip().split("\t")[0] in polyA_res:
+						polyAdetails = polyA_res[line.strip().split("\t")[0]]
+						fout.write(f'{line.strip()}\t{polyAdetails}\n')
+					else:
+						fout.write(f'{line.strip()}\t-\t-\t-\t-\n')
+		return 
 
 def summary():
 	
@@ -1332,15 +1373,15 @@ def main():
 	# 	raw_data_dir = os.path.dirname(str(sum_file))
 	# 	sample_id = os.path.basename(raw_data_dir)
 	# 	fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
-		# print(f'\nPROCESSING SAMPLE {sample_id}')
+	# 	print(f'\nPROCESSING SAMPLE {sample_id}')
 
-		# quality_control(sum_file, sample_id, raw_data_dir)
+	# 	quality_control(sum_file, sample_id, raw_data_dir)
 
-		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+	# 	alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 
-		# fusion_events(fastq_pass, sample_id)
+	# 	fusion_events(fastq_pass, sample_id)
 
-		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+	# 	polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
 		# methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir)
 
@@ -1349,7 +1390,7 @@ def main():
 
 	downstream_analysis()
 
-	# summary()
+	summary()
 
 	print(f'\t--- The pipeline finisded after {datetime.now() - startTime} ---')
 
