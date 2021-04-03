@@ -3,19 +3,17 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 6) {
+if (length(args) == 5) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
   # CSV file used for running TALON
   input_groups <- args[2]
-  # Output direcotry where all stats will be saves
+  # Output directory where all stats will be saves
   main_outdir <- args[3]
-  # Minimum transcript counts
-  minFeatureExpr <- as.numeric(args[4])
   # Adjusted p-value threshold for differential expression analysis
-  adjPValueThreshold <- as.numeric(args[5])
+  adjPValueThreshold <- as.numeric(args[4])
   # Minimum required log2 fold change for differential expression analysis
-  lfcThreshold <- as.numeric(args[6])
+  lfcThreshold <- as.numeric(args[5])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -24,7 +22,6 @@ if (length(args) == 6) {
 # matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filt_talon_abundance.csv"
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
-# minFeatureExpr <- 10  # Minimum transcript counts
 # adjPValueThreshold <- 0.05
 # lfcThreshold <- 2
 
@@ -33,7 +30,6 @@ library("readr")
 library("dplyr")
 library("edgeR")
 library("ggpubr")
-library("DRIMSeq")
 library("ggplot2")
 library("reshape")
 library("patchwork")
@@ -42,101 +38,55 @@ options(scipen = 999)
 
 
 
-##### DIFFERENTIAL TRANSCRIPT EXPRESSION (DTE) ANALYSIS USING DRIMSEQ/EDGER #####
-print("RUNNING DIFFERENTIAL TRANSCRIPT EXPRESSION (DTE) ANALYSIS USING DRIMSEQ/EDGER")
-
+##### DIFFERENTIAL TRANSCRIPT EXPRESSION (DTE) ANALYSIS USING EDGER #####
+print("RUNNING DIFFERENTIAL TRANSCRIPT EXPRESSION (DTE) ANALYSIS USING EDGER")
 outdir <- file.path(main_outdir, "diffExpr_DTE")
 dir.create(outdir, showWarnings = FALSE)
-setwd(outdir)
+
 
 # Input the filtered expression matrix
 expr_file <- read.csv(matrix, header=T)
-# Exporting the unfiltered table
-write.table(expr_file, file=paste(outdir,"/edgeR_filtered_table.tsv", sep=""), sep="\t", row.names = F, quote=FALSE)
-
+# Obtain number of input samples
+print(paste("Total number of input samples:", length(expr_file[ ,10:length(expr_file)]), sep=" " ))
 print(paste("Total number of unique trancripts:", length(unique(expr_file$annot_transcript_id)), sep=" " ))
 
-# Obtain number of input samples
-n <- length(expr_file[ ,10:length(expr_file)])
-print(paste("Total number of input samples:", n, sep=" " ))
 # Reading input csv file containing the groups
-group_samples <- read.csv(input_groups, header=F)[ ,1:3]
+group_samples <- read.csv(input_groups, header=F, row.names=1)[ ,1:2]
 group_samples <- group_samples[order(group_samples$V2), ] # Order data frame
-# Preparing a dataframe containing information about the samples 
-group_samples <- data.frame(sample_id = group_samples$V1, condition = group_samples$V2, batch=group_samples$V3)
-
+colnames(group_samples) <- c("condition", "batch")
 sampletypevalues <- factor(unique(group_samples$condition)) # Obtaining the sample groups
-print(paste("Total number of input groups: ", 
-            length(sampletypevalues)," (", sampletypevalues[1], " and ", sampletypevalues[2],")", sep="" ))
+print(paste("Total number of input groups: ",length(sampletypevalues)," (",sampletypevalues[1],"/",sampletypevalues[2],")", sep="" ))
 
 
 # Obtaining the counts table
-matfile <- expr_file[ ,c(2,1,10:length(expr_file))]  # Obtaining only the annot_transcript_id and the counts
-colnames(matfile)[1:2] <- c("feature_id","gene_id")
-
-# Create a dmDSdata object that is the starting point of DRIMSeq
-drimseq <- dmDSdata(counts = matfile, samples = group_samples)
-print("General input stats:")
-print(drimseq)   # General stats
-
-# Check what is the minimal number of replicates per condition
-print("Number of replicates per condition")
-print(table((DRIMSeq::samples(drimseq))$condition))
-
-# Filtering of lowly expressed transcript
-# The parameters are the suggested by ONT
-drimseq <- dmFilter(drimseq, 
-                    min_samps_feature_expr = 1,
-                    min_feature_expr = minFeatureExpr)
-
-
-# Obtaining the counts after dmFiltering
-filtered_counts <- counts(drimseq)
-
-
-# Printing stats
-print(paste("In total ", length(unique(filtered_counts$feature_id)), "/", length(unique(matfile$feature_id)),
-            " transcripts passed the min. threshold of ", minFeatureExpr," counts.",sep=""))
+matfile <- expr_file[ ,c(2,10:length(expr_file))]  # Obtaining only the annot_transcript_id and the counts
+row.names(matfile) <- matfile$annot_transcript_id; matfile$annot_transcript_id <- NULL
 
 # Creating with design matrix
-if (length(unique(group_samples$batch) == 1)) {
-  design <- model.matrix( ~ condition, data = DRIMSeq::samples(drimseq))
-} else {
-  design <- model.matrix( ~ condition + batch, data = DRIMSeq::samples(drimseq)) }
-
-
-# Removing gene_id column
-transcript_filt_counts <- filtered_counts; transcript_filt_counts$gene_id <- NULL
-
-# Making the annot_transcript_id as row names and removing it as from 1st column
-row.names(transcript_filt_counts) <- transcript_filt_counts$feature_id; transcript_filt_counts$feature_id <- NULL
+design <- model.matrix( ~ condition, data = group_samples)
 
 # Storing the raw read counts table in a simple list-based data object called a DGEList.
-edgeR_table <- DGEList(transcript_filt_counts, group=group_samples$condition)
+edgeR_table <- DGEList(matfile, group=group_samples$condition)
+# Filtering out lowly expressed genes
+keep <- filterByExpr(edgeR_table, group=group_samples$condition)
+edgeR_table <- edgeR_table[keep, , keep.lib.sizes=FALSE]
+
+transcript_filt_counts <- edgeR_table$counts  # Obtain the filtered counts
+# write.table(transcript_filt_counts, file=paste(outdir,"/filtered_data.tsv", sep=""), sep=",", row.names=T, col.names=NA, quote=FALSE)
+
+# Printing stats
+print(paste("In total ", nrow(transcript_filt_counts), "/", length(unique(expr_file$annot_transcript_id))," transcripts passed the filterByExpr filter.",sep=""))
 
 # Normalisation for RNA composition by finding a set of scaling factors for the library sizes 
 # that minimize the log-fold changes between the samples for most transcripts. The default method
 # for computing these scale factors uses a trimmed mean of M-values (TMM) between each pair of samples.
-edgeR_table <- calcNormFactors(edgeR_table)
+edgeR_table <- calcNormFactors(edgeR_table, method="TMM")
 
 # Estimating common dispersion and tagwise dispersions 
 edgeR_table <- estimateDisp(edgeR_table, design)
 
-# # Plotting the per-transcript dispersion estimates
-# png(paste(outdir,"/edgeR_DispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-# plotBCV(edgeR_table)
-# title(main = "Dispersion Estimates")
-# dev.off()
-
 # Performing quasi-likelihood F-tests
 fit <- glmQLFit(edgeR_table, design)
-
-# # Plotting the quasi-likelihood dispersion  estimates
-# png(paste(outdir,"/edgeR_QLDispersionPlot.png",sep=""), units='px', height=900, width=1600, res=90)
-# plotQLDisp(fit)
-# title(main = "QL Dispersion Estimates")
-# dev.off()
-
 qlf <- glmQLFTest(fit)
 
 # Obtaining the results table and sorting by p-value
@@ -145,9 +95,7 @@ edger_res <- edger_res_overall[,c(1,4,5)];  colnames(edger_res) <- c("log2FoldCh
 
 # Output basic stats
 print(paste("Results indicating the transcript set with log2FoldChange value > |", lfcThreshold,"| and with adjasted p-value < ", adjPValueThreshold, sep=""))
-is.de <- decideTests(qlf, p.value=adjPValueThreshold, lfc=lfcThreshold)
-print(summary(is.de))
-
+print(summary(decideTests(qlf, p.value=adjPValueThreshold, lfc=lfcThreshold)))
 
 
 # Selecting the samples
@@ -155,7 +103,7 @@ selected_samples <- colnames(transcript_filt_counts[ ,(which(group_samples$condi
 # Merging cpm values and stats from EdgeR
 total_results <- data.frame(merge(cpm(edgeR_table)[ ,selected_samples], edger_res, by=0))
 # Importing the gene names and remove duplicates
-total_results <- merge(expr_file[ ,c("annot_transcript_id", "annot_transcript_name", "annot_gene_id", "annot_gene_name")], total_results, by.y="Row.names", by.x="annot_transcript_id", all.y=TRUE, no.dups=TRUE)
+total_results <- merge(expr_file[ ,c(2,4,1,3,5:9)], total_results, by.y="Row.names", by.x="annot_transcript_id", all.y=TRUE, no.dups=TRUE)
 total_results <- total_results[!duplicated(total_results$annot_transcript_id),  ]
 # Renaming the first two columns
 colnames(total_results)[1:4] <- c("transcript_id", "transcript_name", "gene_id", "gene_name")
@@ -171,13 +119,13 @@ results_selected <- results_selected[with(results_selected, order(pval, padj)), 
 # Exporting the normalised results table containing the selected features with log2FoldChange greater than 1 and adjusted p value lower than the user-input value
 write.table(results_selected, file=paste(outdir,"/",sampletypevalues[1],"VS",sampletypevalues[2],"_edgeR_topTranscriptsBelow", gsub("[.]", "", adjPValueThreshold), "LFC", gsub("[.]", "", lfcThreshold), ".csv", sep=""), sep="\t", row.names = F, quote=FALSE)
 
+
 # Export a list of all novel differentially expressed isoforms to proceed for Functional Annotation
 list_of_de_transcripts <- results_selected[,1]  # List of all transcripts that were differentially expressed
 novel_de_transcripts <- grep('TALONT', list_of_de_transcripts, value=TRUE)  # Obtaining only the novel transcripts that were DEd
 write.table(novel_de_transcripts, file=paste(outdir,"/novel_de_transcripts_for_funcAnnotation.tsv", sep=""), sep="\t", row.names = F, col.names = F, quote=FALSE)
 map_to_gene <- results_selected[results_selected$transcript_id %in% novel_de_transcripts, c(3,1)]
 write.table(map_to_gene, file=paste(outdir,"/novel_de_transcripts_for_funcAnnotation.gene_trans_map", sep=""), sep="\t", row.names = F, col.names = F, quote=FALSE)
-
 
 
 # MA-plot - Drawing the expression levels over the exons to highlight differential exon usage
@@ -192,7 +140,7 @@ ggplot(data.frame(edger_res_overall), aes(y=logFC, x=logCPM)) +
         geom_point(size=1.2) + 
         geom_hline(yintercept = -lfcThreshold, color="indianred3") + 
         geom_hline(yintercept = lfcThreshold, color="mediumseagreen") +
-        theme_bw() +
+        theme_minimal() +
         aes(colour=gene) + 
         scale_colour_manual(name="Transcripts", values=colours) +
         labs(title="MA plot - log(FC) vs. log(CPM) on transcript level data", x="log(CountsPerMillion)", y="log(FoldChange)")
@@ -222,7 +170,7 @@ p1 <- ggplot(edger_res_overall, aes(x=logCPM, y=logFC)) +
              scale_colour_manual(name="Transcripts", values=colours) +
              labs(title="MA plot - log(FC) vs. log(CPM) on transcript level data with Known/Novel-transcript indication", 
                   x="log(CountsPerMillion)", y="log(FoldChange)", shape="Known/Novel") +
-             theme(legend.position = "right")
+             theme(legend.position = "left")
 ggsave(file=paste(outdir,"/edgeR_MAplot_withTranscriptIndications.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 
 
@@ -257,7 +205,7 @@ p2 <- ggplot(significant_overview, aes(x=Var1, y=perc, fill=Var1)) +
              labs(x="", y="Percentage of transcripts") +
              scale_fill_manual("", values = legend_colors[1:length(significant_overview$Var1)])
 
-figure <- p1 + p2 + plot_layout(ncol = 1, heights=c(1,.25))
+figure <- p1 + p2 + plot_layout(ncol = 1, heights=c(1,.35))
 ggsave(file=paste(outdir,"/edgeR_MAplot_withTranscriptIndicationsNgroupSun.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
 rm(logUp, logDown, withStat, colours, gene,withNovel, p1, p2)
 
@@ -294,7 +242,7 @@ text(edger_res_overall$logFC[gn.selected], edger_res_overall$significant[gn.sele
 dev.off()
 rm(genes.to.plot, cols, gn.selected)
 edger_res_overall$significant <- NULL; edger_res_overall$pch  <- NULL; edger_res_overall$transcript_name <- NULL
-rm(is.de,  fit, qlf, transcript_filt_counts, edger_res, edger_res_overall, edgeR_table, design)
+rm(fit, qlf, transcript_filt_counts, edger_res, edger_res_overall, edgeR_table, design)
 
 
 ### TOP 30 DE TRANSCRIPTS
@@ -302,6 +250,7 @@ rm(is.de,  fit, qlf, transcript_filt_counts, edger_res, edger_res_overall, edgeR
 # Plotting the normalized count values for the top 30 differentially expressed genes (by padj values)
 ## Order results by by pvalue and adjasted p-value values and get the first 30 genes
 total_results <- total_results[with(total_results, order(pval, padj)), ]
+total_results <- total_results[ ,-c(3:9)]
 # Obtaining the top 30 most significant genes and the per sample normalised (CPM) data
 top30_sigNorm <- total_results[1:30, !names(total_results) %in% c("gene_name", "gene_id", "log2FoldChange", "pval", "padj")]
 # Gathering the columns to have normalized counts to a single column
@@ -319,5 +268,4 @@ ggplot(melt_top30_sigNorm, aes(x = transcript_name, y = value, color = group)) +
   theme(legend.position="bottom") +
   labs(title="Top 30 Significant DE Transcripts", x="Transcripts", y="log10(CPM)")
 ggsave(file=paste(outdir,"/edgeR_top30MostSingificantTranscripts.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-rm(melt_top30_sigNorm, top30_sigNorm, n, input_groups, legend_colors, minFeatureExpr, 
-   significant_overview, filtered_counts,drimseq, figure, matfile, matrix)
+rm(melt_top30_sigNorm, top30_sigNorm, input_groups, legend_colors, significant_overview, figure, matfile, matrix)
