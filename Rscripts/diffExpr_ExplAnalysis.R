@@ -3,17 +3,15 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 5) {
+if (length(args) == 4) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
   # CSV file used for running TALON
   input_groups <- args[2]
   # Output direcotry where all stats will be saves
   main_outdir <- args[3]
-  # Minimum gene counts
-  minGeneExpr <- as.numeric(args[4])
   # Top N genes to be used for the heatmap
-  n_top <- as.numeric(args[5])
+  n_top <- as.numeric(args[4])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -22,7 +20,6 @@ if (length(args) == 5) {
 # matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/prefilt_talon_abundance.tsv"
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
-# minGeneExpr <- 10  # Minimum gene counts
 # n_top <- 100
 
 
@@ -42,10 +39,9 @@ Sys.setenv("plotly_api_key"="MV5szwYMXkYMTiSifC1h")
 
 ### EXPLORATORY ANALYSIS ###
 print("PERFORMING EXPLORATORY ANALYSIS ON A GENE LEVEL")
-
 outdir <- file.path(main_outdir, "diffExpr_ExplAnalysis")
 dir.create(outdir, showWarnings = FALSE)
-setwd(outdir)
+
 
 # Input the filtered expression matrix
 expr_file <- read.delim(matrix)
@@ -53,30 +49,24 @@ expr_file <- read.delim(matrix)
 # Reading input csv file containing the groups
 groups <- read.csv(input_groups, header=F)[ ,1:3]
 groups <- groups[order(groups$V2), ] # Order data frame
-
 sampletypevalues <- factor(unique(groups$V2)) # Obtaining the sample groups
 
 matfile <- expr_file[ ,c(3,12:length(expr_file))]  # Obtaining only the annot_gene_id and the counts
-
 # Summarising all reads per gene name and removing the duplicate  rows
 matfile <- data.frame(dplyr::group_by(matfile, annot_gene_id) %>% dplyr::summarise_all(sum))
-
 # Making the annot_transcript_id as row names and removing it as from 1st column
 row.names(matfile) <- matfile$annot_gene_id; matfile$annot_gene_id <- NULL
 
 # Applying a basic filtering step, where genes with less 
 # than readCountMinThreshold will be excluded from the analysis.
 # This step is recommeneded by ONT
-matfile <- matfile[rowSums(matfile) > minGeneExpr, ]
+matfile <- matfile[rowSums(matfile) > 10, ]
 
 # Designing the data's factors which indicate the experimental group for each sample
 samplefactors <- data.frame(row.names=groups$V1, condition = factor(groups$V2, levels=sampletypevalues), batch = factor(groups$V3))
 
 # Constructing the DESeqDataSet object which is the starting point of the analysis
-if (length(unique(samplefactors$batch) == 1)) {
-  dds = DESeqDataSetFromMatrix(countData = matfile, colData = samplefactors, design = ~ condition)
-} else {
-  dds = DESeqDataSetFromMatrix(countData = matfile, colData = samplefactors, design = ~ batch + condition) }
+dds = DESeqDataSetFromMatrix(countData = matfile, colData = samplefactors, design = ~ condition)
 rm(samplefactors)
 
 ## PCA PLOT
@@ -181,9 +171,5 @@ if (length(groups) <= 100) {
   heat_map <- heatmaply(top_genes, limits = NULL, colors = brewer.pal(11, "Spectral"), scale = "row",
                         main = heatmap_title, key.title=NULL, col_side_colors = data.frame(groups),
                         hide_colorbar = FALSE, fontsize_row = 8, showticklabels = c(FALSE, TRUE))
-
 }
-
 plotly_IMAGE(heat_map, width = 1200, height = 800, format = "png", out_file = paste(outdir,"/explAnalysis_heatmap.png",sep =""))
-rm(counts.keep, heat_map, highly_variable_lcpm, logcounts, myCPM, thresh, top_genes, y, col_condition, heatmap_title, keep, 
-   n_top, select_var, var_genes, check.integer)
