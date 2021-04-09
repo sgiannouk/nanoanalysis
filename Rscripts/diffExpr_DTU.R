@@ -3,7 +3,7 @@
 
 
 args <- commandArgs(TRUE)
-if (length(args) == 7) {
+if (length(args) == 8) {
   # Input filtered matrix (output of step 8)
   matrix <- args[1]
   # CSV file used for running TALON
@@ -12,12 +12,14 @@ if (length(args) == 7) {
   ref_transcriptome <- args[3]
   # Transcriptome annotation from the TALON database
   ref_annotation <- args[4]
-  # Python script necessary to obtain external files
-  python_script <- args[5]
   # Output directory where all stats will be saved
-  main_outdir <- args[6]
+  main_outdir <- args[5]
+  # Run multi-IUPred2A
+  python_scr <- args[6]
+  # Pfam database
+  pfam_db <- args[7]
   # Number of cores to use
-  num.cores <- as.numeric(args[7])
+  num.cores <- as.numeric(args[8])
 } else {
   cat("ERROR - The number of input arguments is not correct...\nEXITING!\n")
   quit()
@@ -28,9 +30,10 @@ if (length(args) == 7) {
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
 # ref_transcriptome <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/reference_transcriptome.fasta"
 # ref_annotation <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/database_talon.gtf"
+# pfam_db <- "/home/stavros/playground/progs/PfamScan/databases"
 # num.cores <- 2
 
-library("IsoformSwitchAnalyzeR")
+suppressPackageStartupMessages(library("IsoformSwitchAnalyzeR"))
 options (mc.cores=num.cores)
 options(scipen = 999)
 
@@ -38,7 +41,7 @@ options(scipen = 999)
 ##### DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR #####
 print("RUNNING DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR")
 
-outdir <- file.path(main_outdir, "diffExpr_DTU")
+outdir <- file.path(main_outdir, "diffExpr_DTU_OLD")
 dir.create(outdir, showWarnings = FALSE)
 
 
@@ -76,8 +79,8 @@ rm(expression, matfile, tallonCols, ref_annotation, ref_transcriptome, input_gro
 
 # Pre-filtering step. Remove single isoform genes or non-expressed isoforms
 talonSwitch <- preFilter(switchAnalyzeRlist       = talonSwitch,
-                         geneExpressionCutoff     = 1,
-                         isoformExpressionCutoff  = 10,
+                         # geneExpressionCutoff     = 1,
+                         # isoformExpressionCutoff  = 10,
                          removeSingleIsoformGenes = TRUE)
 
 talonSwitch <- isoformSwitchAnalysisPart1(switchAnalyzeRlist   = talonSwitch,
@@ -94,24 +97,16 @@ print(extractSwitchSummary(talonSwitch))
 
 # Exporting the IsoformSwitchAnalyzeR test results
 write.table(talonSwitch$isoformFeatures, file=paste(outdir,"/isoformSwitchAnalysis_results.csv", sep=""), sep=",", row.names=F, quote=F)
-# Calling a python script to obtain the external files needed for proceeding with the analysis
-system(paste('python3', python_script, outdir, as.character(num.cores),sep=" "), wait=TRUE)
 
-# # Creating the external files that need to be filled by
-# print(paste("Pfam -- run:$ pfam_scan.pl -fasta ",outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta -dir /home/stavros/playground/progs/PfamScan/databases > results_pfam.txt", sep=""))
-# file.create(paste(outdir,"/results_pfam.txt", sep=""))
-# 
-# 
-# print("CPAT -- nt | http://lilab.research.bcm.edu/cpat/")
-# file.create(paste(outdir,"/results_cpat.txt", sep=""))
-# 
-# print("IUPred2A -- AA | https://iupred2a.elte.hu/")
-# file.create(paste(outdir,"/results_IUPred2A.txt", sep=""))
-# 
-# print("SignalP -- AA | http://www.cbs.dtu.dk/services/SignalP/")
-# print("SignalP -- AA | Downloads > Prediction summary")
-# file.create(paste(outdir,"/results_SignalP.txt", sep=""))
-# readline(prompt="Press [enter] to continue")
+### Calling external functions
+# 1. Pfam
+system(paste('pfam_scan.pl','-cpu', as.character(num.cores), '-fasta', paste(outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta", sep=''), '-dir', pfam_db,'-outfile', paste(outdir,"/results_pfam.txt", sep=''),sep=' '))
+# 2. IUPred2A
+system(paste('python3', python_scr, paste(outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta", sep=""),  sep=" "), wait=TRUE)
+# 3. SignalP
+system(paste('signalp','-stdout', '-fasta', paste(outdir,"/isoformSwitchAnalyzeR_isoform_AA.fasta", sep=''), '>', paste(outdir,"/results_SignalP.txt", sep=''), sep=' '))
+# 4. CPC2
+system(paste('CPC2.py', '-i', paste(outdir,"/isoformSwitchAnalyzeR_isoform_nt.fasta", sep=""), '-o', paste(outdir,"/results_cpc2.csv", sep=""), sep=' '))
 
 
 talonSwitch <- isoformSwitchAnalysisPart2(switchAnalyzeRlist       = talonSwitch,
@@ -138,6 +133,7 @@ talonSwitch <- isoformSwitchAnalysisPart2(switchAnalyzeRlist       = talonSwitch
                                           asFractionTotal         = FALSE,
                                           outputPlots             = FALSE,
                                           quiet                   = FALSE)
+
 
 # Extracting the (top) switching genes/isoforms (with functional consequences).
 extractTopSwitches(talonSwitch, filterForConsequences = TRUE, n=Inf)

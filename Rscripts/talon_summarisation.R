@@ -27,12 +27,12 @@ if (length(args) == 6) {
 # talon_filter <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/filtered_isoforms.csv"
 # ism_threshold <- 20
 
-library("dplyr")
-library("plotly")
-library("htmltools")
-library("webshot")
-library("formattable")
-library("ggpubr")
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("plotly"))
+suppressPackageStartupMessages(library("htmltools"))
+suppressPackageStartupMessages(library("webshot"))
+suppressPackageStartupMessages(library("formattable"))
+suppressPackageStartupMessages(library("ggpubr"))
 options(scipen = 999)
 theme_set(theme_pubr())
 

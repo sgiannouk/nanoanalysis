@@ -14,11 +14,12 @@ if (length(args) == 2) {
 # matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/perTranscript_expression_matrix.csv"
 
 
-library("dplyr")
-library("ggplot2")
-library("reshape2")
-library("RColorBrewer")
-setwd(outdir)
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("reshape2"))
+suppressPackageStartupMessages(library("RColorBrewer"))
+
+
 
 # Input the edited expression matrix
 expr_file <- read.csv(matrix, header=TRUE, row.names=1)
@@ -63,4 +64,4 @@ theme(plot.title = element_text(colour = "#a6a6a4", size=13),
 labs(title="Transcript type summarisation (ref. genome/Talon)",
      x="",
      y="Percentage of reads (%)")
-ggsave(file="transcript_type_summarisation.png", width = 10, height = 6, units = "in", dpi = 1200)
+ggsave(file=paste(outdir, "/transcript_type_summarisation.png", sep=""), width = 10, height = 6, units = "in", dpi = 1200)

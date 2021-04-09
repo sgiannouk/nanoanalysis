@@ -20,17 +20,18 @@ if (length(args) == 4) {
 # matrix <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/prefilt_talon_abundance.tsv"
 # input_groups <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/talon_input.csv"
 # main_outdir <- "/Users/stavris/Desktop/Projects/silvia_ont_umc/talon_analysis_reimplementation_3/diffExpr_analysis"
-# n_top <- 100
+# n_top <- 60
 
 
-library("readr")
-library("edgeR")
-library("dplyr")
-library("plotly")
-library("DESeq2")
-library("ggplot2")
-library("heatmaply")
-library("RColorBrewer")
+suppressPackageStartupMessages(library("readr"))
+suppressPackageStartupMessages(library("edgeR"))
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("plotly"))
+suppressPackageStartupMessages(library("DESeq2"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("pheatmap"))
+suppressPackageStartupMessages(library("heatmaply"))
+suppressPackageStartupMessages(library("RColorBrewer"))
 
 Sys.setenv("plotly_username"="sgiannouk")
 Sys.setenv("plotly_api_key"="MV5szwYMXkYMTiSifC1h")
@@ -76,18 +77,34 @@ rm(samplefactors)
 vsd <- vst(dds, blind=T)
 data_pca <- plotPCA(vsd, intgroup = "condition", returnData=TRUE)
 percentVar <- round(100 * attr(data_pca, "percentVar"))
-pca <- ggplot(data_pca, aes(PC1, PC2, color=condition, label=name)) + geom_point(size=2) +
+pca <- ggplot(data_pca, aes(PC1, PC2, color=condition, label=name)) + 
+       geom_point(size=2) +
+       geom_text(size=2, hjust=.5, vjust=-1) +
        scale_color_manual(name="Groups", values=c("#66CC99", "#877598")) +
        theme_bw() +
-       theme(panel.border = element_blank(), panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) +
-       theme(legend.position = "bottom", legend.justification = "center") +
+       theme(panel.border = element_blank(), 
+             panel.grid.minor = element_blank(), 
+             axis.line = element_line(colour = "black"),
+             legend.position = "bottom", 
+             legend.justification = "center") +
        ggtitle("Principal Component Analysis")+
        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
        ylab(paste0("PC2: ",percentVar[2],"% variance"))
-ggsave(file=paste(outdir, "/explAnalysis_PCAPlot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
-ptly <- ggplotly(pca, originalData = T, dynamicTicks = T) #%>% layout(yaxis = list(tickformat = "%"))
-htmlwidgets::saveWidget(ptly, paste(outdir, "/explAnalysis_PCAPlot.html",sep=""))
-rm(dds, vsd, data_pca, percentVar, pca, ptly)
+ggsave(file=paste(outdir, "/1.explAnalysis_PCAPlot.png",sep=""), width = 10, height = 6, units = "in", dpi = 1200)
+
+
+# Compute pairwise correlation values of the rlog matrix
+# Plot heatmap
+group_df <- data.frame(row.names = row.names(data_pca), Groups = data_pca$group)
+corheat <- pheatmap(cor(assay(vsd)), 
+                    main = "Correlation heatmap", 
+                    fontsize=9,
+                    border_color=NA,
+                    angle_col = 45,
+                    treeheight_row = 0,
+                    annotation_col=group_df)
+ggsave(corheat, file=paste(outdir, "/2.heatmap.correlation.png",sep=""), width = 10, height = 6, units = "in", dpi = 900)
+rm(dds, vsd, data_pca, percentVar, pca)
 
 check.integer <- function(N){ !grepl("[^[:digit:]]", format(N,  digits = 20, scientific = FALSE)) }
 
@@ -103,7 +120,7 @@ if (length(sampletypevalues) == 2) {
 
 # Examine the distributions of the raw counts by plotting the log2CPM of the counts
 print("Checking the distribution of the read counts on the log2 scale...")
-png(paste(outdir,"/explAnalysis_Log2DistPlot.png",sep=""), units='px', height=900, width=1600, res=90)
+png(paste(outdir,"/3.explAnalysis_Log2DistPlot.png",sep=""), units='px', height=900, width=1600, res=90)
 # Check distributions of samples using boxplots
 par(mar=c(8.1, 4.1, 4.1, 2.1))
 boxplot(cpm(data$counts, prior.count=2, log=TRUE),col=col_condition, xlab="", ylab="Log2 counts per million", las=2)
@@ -116,7 +133,7 @@ dev.off()
 # If the experiment is well controlled and has worked well, what we hope to see is that the greatest sources of variation are the
 # treatments/groups we are interested in. It is also an incredibly useful tool for quality control and checking for outliers.
 print("Creating the MultiDimensional Scaling plot...")
-png(paste(outdir,"/explAnalysis_plotMDS.png",sep=""), units='px', height=900, width=1600, res=90)
+png(paste(outdir,"/4.explAnalysis_plotMDS.png",sep=""), units='px', height=900, width=1600, res=90)
 plotMDS(data, col=col_condition)
 title(main = "MultiDimensional Scaling plot\n(distances approximate the log2 fold changes between the samples)")
 dev.off()
@@ -154,7 +171,7 @@ heatmap_title = paste("Top",n_top,"most variable genes across samples",sep=" ")
 # Creating the heatmaps. If samples are more than 100, then sample labels are being omitted
 if (length(groups) <= 100) {
   # Heatmap of top selected normalised genes
-  heatmaply(top_genes, file = paste(outdir,"/explAnalysis_heatmap.html",sep =""),
+  heatmaply(top_genes, file = paste(outdir,"/5.explAnalysis_heatmap.html",sep =""),
             limits = NULL, colors = brewer.pal(11,"Spectral"), scale = "row", main = heatmap_title,
             key.title=NULL, col_side_colors = data.frame(groups), hide_colorbar = FALSE,
             column_text_angle=35, fontsize_col = 9, fontsize_row = 8,  showticklabels=c(TRUE,TRUE))
@@ -164,7 +181,7 @@ if (length(groups) <= 100) {
                         showticklabels=c(TRUE,TRUE))
 } else {
   # Heatmap of top selected genes, No sample-names
-  heatmaply(top_genes, file = paste(outdir,"/explAnalysis_heatmap.html",sep =heatmap_title),
+  heatmaply(top_genes, file = paste(outdir,"/5.explAnalysis_heatmap.html",sep =heatmap_title),
             limits = NULL, colors = brewer.pal(11, "Spectral"), scale = "row", main = "Top",
             key.title=NULL, col_side_colors = data.frame(groups), hide_colorbar = FALSE,
             showticklabels = c(FALSE, TRUE), fontsize_row = 8)
@@ -172,4 +189,4 @@ if (length(groups) <= 100) {
                         main = heatmap_title, key.title=NULL, col_side_colors = data.frame(groups),
                         hide_colorbar = FALSE, fontsize_row = 8, showticklabels = c(FALSE, TRUE))
 }
-plotly_IMAGE(heat_map, width = 1200, height = 800, format = "png", out_file = paste(outdir,"/explAnalysis_heatmap.png",sep =""))
+plotly_IMAGE(heat_map, width = 1200, height = 800, format = "png", out_file = paste(outdir,"/6.explAnalysis_heatmap.png",sep =""))

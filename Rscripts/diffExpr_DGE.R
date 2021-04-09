@@ -26,11 +26,12 @@ if (length(args) == 5) {
 # lfcThreshold <- 2
 
 
-library("dplyr")
-library("edgeR")
-library("DRIMSeq")
-library("ggplot2")
-library("reshape")
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("edgeR"))
+suppressPackageStartupMessages(library("DRIMSeq"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("reshape"))
+options(ggrepel.max.overlaps = Inf)
 options(scipen = 999)
 
 
@@ -317,11 +318,12 @@ rm(list=setdiff(ls(), c("main_outdir", "filtered_counts", "group_samples", "desi
 
 ################################################################
 ################ FUNCTIONAL ENRICHMENT ANALYSIS ################
-library("SPIA")
-library("DOSE")
-library("ReactomePA")
-library("enrichplot")
-library("clusterProfiler")
+suppressPackageStartupMessages(library("SPIA"))
+suppressPackageStartupMessages(library("DOSE"))
+suppressPackageStartupMessages(library("ReactomePA"))
+suppressPackageStartupMessages(library("enrichplot"))
+suppressPackageStartupMessages(library("org.Hs.eg.db"))
+suppressPackageStartupMessages(library("clusterProfiler"))
 options(scipen = 0)
 
 
@@ -362,48 +364,47 @@ de.entrez <- names(res)
 ego <- enrichGO(de.entrez, OrgDb = "org.Hs.eg.db", ont="BP", readable=TRUE)
 # Investigate how the significant GO terms are distributed over the GO graph (GO DAG graph)
 goplot(ego, showCategory = 6)
-ggsave(file=paste(outdir, "/enrichment.DAGgraph.png",sep=""), width = 10, height = 8, units = "in", dpi = 900)
+ggsave(file=paste(outdir, "/1.enrichment.DAGgraph.png",sep=""), width = 10, height = 8, units = "in", dpi = 900)
 
-emapplot(ego, showCategory = 50)
 
 # Visualize enriched terms
 barplot(ego, showCategory=20)
-ggsave(file=paste(outdir, "/enrichment.enrichplot-bar.png",sep=""), width = 20, height = 8, units = "in", dpi = 900)
+ggsave(file=paste(outdir, "/2.enrichment.enrichplot-bar.png",sep=""), width = 20, height = 8, units = "in", dpi = 900)
 
 # Dot plot is similar to bar plot with the capability to encode another score as dot size
 dotplot(ego, showCategory=30)
-ggsave(file=paste(outdir, "/enrichment.enrichplot-dot.png",sep=""), width = 20, height = 10, units = "in", dpi = 900)
+ggsave(file=paste(outdir, "/3.enrichment.enrichplot-dot.png",sep=""), width = 20, height = 10, units = "in", dpi = 900)
 
 go <- enrichGO(de.entrez, OrgDb = "org.Hs.eg.db", ont="all")
 dotplot(go, split="ONTOLOGY") + 
         facet_grid(ONTOLOGY~., scale="free")
-ggsave(file=paste(outdir, "/enrichment.enrichplot-gocategories.png",sep=""), width = 20, height = 12, units = "in", dpi = 900)
+ggsave(file=paste(outdir, "/4.enrichment.enrichplot-gocategories.png",sep=""), width = 20, height = 12, units = "in", dpi = 900)
 
 
 # Gene-Concept Network
 ego2 <- simplify(ego)  # remove redundant GO terms
-cnetplot(ego2, showCategory = 5, foldChange=res)
-ggsave(file=paste(outdir, "/enrichment.geneconcept-network.png",sep=""), width = 10, height = 6, units = "in", dpi = 900)
+enrichplot::cnetplot(ego2, showCategory = 5, foldChange=res)
+ggsave(file=paste(outdir, "/5.enrichment.geneconcept-network.png",sep=""), width = 10, height = 6, units = "in", dpi = 900)
 
 # UpSet Plot
 # The upsetplot is an alternative to cnetplot for visualizing the complex association between 
 # genes and gene sets. It emphasizes the gene overlapping among different gene sets.
-png(paste(outdir, "/enrichment.upset.png",sep=""), units='px', width=1600, height=900, res=100)
+png(paste(outdir, "/6.enrichment.upset.png",sep=""), units='px', width=1600, height=900, res=100)
 upsetplot(ego, n=10)
 dev.off()
 
 # Heatmap-like functional classification
 heatplot(ego2, showCategory = 15, foldChange=res)
-ggsave(file=paste(outdir, "/enrichment.heatmap.png",sep=""), width = 18, height = 3, units = "in", dpi = 900)
+ggsave(file=paste(outdir, "/7.enrichment.heatmap.png",sep=""), width = 18, height = 3, units = "in", dpi = 900)
 
 # The SPIA (Signaling Pathway Impact Analysis) tool can be used to integrate the lists of 
 # differentially expressed genes, their fold changes, and pathway topology to identify affected pathways
-spia_result <- spia(de=res, all=as.vector(filtered_counts$ENTREZID), organism="hsa", nB=5000)
-
-png(paste(outdir, "/enrichment.spia-results.png",sep=""), units='px', width=1600, height=900, res=100)
-plotP(spia_result, threshold=0.05)
-dev.off()
+spia_result <- spia(de=res, all=as.vector(filtered_counts$ENTREZID), organism="hsa", nB=4000)
 
 # Output of the SPIA significant results
 spia_result.sign <- spia_result[spia_result$pGFdr<=adjPValueThreshold, ]
 write.table(spia_result.sign, file=paste(outdir,"/spia.significant.csv", sep=""), sep="\t", row.names = F, quote=FALSE)
+
+png(paste(outdir, "/8.enrichment.spia-results.png",sep=""), units='px', width=1600, height=900, res=100)
+plotP(spia_result, threshold=0.05)
+dev.off()

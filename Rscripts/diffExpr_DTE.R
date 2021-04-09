@@ -26,14 +26,14 @@ if (length(args) == 5) {
 # lfcThreshold <- 2
 
 
-library("readr")
-library("dplyr")
-library("edgeR")
-library("ggpubr")
-library("ggplot2")
-library("reshape")
-library("patchwork")
-library("ggchicklet")
+suppressPackageStartupMessages(library("readr"))
+suppressPackageStartupMessages(library("dplyr"))
+suppressPackageStartupMessages(library("edgeR"))
+suppressPackageStartupMessages(library("ggpubr"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("reshape"))
+suppressPackageStartupMessages(library("patchwork"))
+suppressPackageStartupMessages(library("ggchicklet"))
 options(scipen = 999)
 
 

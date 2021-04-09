@@ -17,9 +17,9 @@ if (length(args) == 2) {
 
 
 
-library("plyr")
-library("ggplot2")
-library("doParallel")
+suppressPackageStartupMessages(library("plyr"))
+suppressPackageStartupMessages(library("ggplot2"))
+suppressPackageStartupMessages(library("doParallel"))
 registerDoParallel(cores=cores.to.use)
 
 
