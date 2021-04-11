@@ -1,6 +1,6 @@
 ###Stavros Giannoukakos### 
 #Version of the program
-__version__ = "v0.2.1"
+__version__ = "v0.2.2"
 
 import time
 import argparse
@@ -1112,7 +1112,7 @@ class downstream_analysis:
 					fout.write(f'{gene}\t{isoform}\t{orf_type}\n')
 
 		
-		annotation  = {}
+		polyA_res  = {}
 		# Creating a dictionary to save the polyA results
 		with open(f'{polyA_analysis_dir}/dpa_results/polya_diff_per_transcript.tsv') as polyin:
 			for line in polyin:
@@ -1122,7 +1122,7 @@ class downstream_analysis:
 					median_treatment = line.strip().split("\t")[5]
 					median_diff = line.strip().split("\t")[4]
 					fdr = line.strip().split("\t")[8]
-					annotation[contig] = f'{median_control}\t{median_treatment}\t{median_diff}\t{fdr}'
+					polyA_res[contig] = f'{median_control}\t{median_treatment}\t{median_diff}\t{fdr}'
 
 		annot = {}
 		with open(os.path.join(expression_analysis_dir, "database_talon.gtf")) as ref_in:
@@ -1298,8 +1298,7 @@ def summary():
 	os.system('mv {0}/*.fragSize {1}'.format(postAlignment_reports, individual_postal_reports))
 
 	### Removing unnecessary files
-	# subprocess.run(f'rm {extracted_fastq}', shell=True)  # Removing the extracted fastq
-	subprocess.run(f'rm {polyA_analysis_dir}/*/fastq_runid*', shell=True)  # Removing index 
+	# subprocess.run(f'rm {alignments_dir}/*.fastq*', shell=True)  # Removing the extracted fastq
 	return
 
 
@@ -1311,19 +1310,19 @@ def main():
 	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
 	num_of_samples = len(summary_files)
 
-	# for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
-	# 	raw_data_dir = os.path.dirname(str(sum_file))
-	# 	sample_id = os.path.basename(raw_data_dir)
-	# 	fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
-	# 	print(f'\nPROCESSING SAMPLE {sample_id}')
+	for sum_file in [s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]:
+		raw_data_dir = os.path.dirname(str(sum_file))
+		sample_id = os.path.basename(raw_data_dir)
+		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
+		print(f'\nPROCESSING SAMPLE {sample_id}')
 			
-	# 	quality_control(sum_file, sample_id, raw_data_dir)
+		quality_control(sum_file, sample_id, raw_data_dir)
 
-	# 	alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+		alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 
-	# 	polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
+		polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
-	# 	methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir)
+		methylation_detection(sample_id, sum_file, fastq_pass, raw_data_dir)
 
 	expression_analysis()
 
