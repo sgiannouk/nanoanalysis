@@ -41,7 +41,7 @@ options(scipen = 999)
 ##### DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR #####
 print("RUNNING DIFFERENTIAL TRANSCRIPT USAGE (DTU) AND DIFFERENTIAL EXON USAGE (DEU) ANALYSIS USING IsoformSwitchAnalyzeR")
 
-outdir <- file.path(main_outdir, "diffExpr_DTU_OLD")
+outdir <- file.path(main_outdir, "diffExpr_DTU")
 dir.create(outdir, showWarnings = FALSE)
 
 
