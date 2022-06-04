@@ -1,0 +1,23 @@
+TO DO LIST
+----------
+
+
+
+INITIAL STEPS
+- create GitHub repository (DONE)
+- build a Python environment (DONE)
+- create Django project (DONE)
+- connect Django project with GitHub (DONE)
+- make website logo (DONE)
+
+BUILDING THE WEBSITE 
+We will need the following HTML pages
+1. home page (with navigation bar, tabs etc)
+2. give suggestions/feedback page
+3. report an issue page
+4. how to use the site page (video included)
+5. usage statistics page
+6. how to cite page
+
+7. results page 
+	- 
