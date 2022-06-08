@@ -12,7 +12,7 @@ from collections import Counter
 import shutil, glob, sys, os
 
 
-ont_data =  "/home/stavros/playground/ont_basecalling/guppy_v3_basecalling"
+ont_data =  "/home/stavros/playground/nanocalling/guppy_v3_basecalling"
 annotation = {"NonTransf":"control", "Tumour":"treatment"}
 chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "Tumour_2",  "Tumour_4")
 # chosen_samples = ("Sample_3") #"Sample_2" , 
@@ -22,6 +22,7 @@ chosen_samples = ("NonTransf_1",  "NonTransf_2",  "NonTransf_3", "Tumour_1",  "T
 ### References
 refGenomeGRCh38 = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.fa"
 refGenomeGRCh38_traclean = "/home/stavros/references/reference_genome/GRCh38_GencodeV31_primAssembly/GRCh38.primary_assembly.genome.edited.fa"
+refTranscGRCh38 = "/home/stavros/references/reference_transcriptome/GRCh38_GencodeV35/GRCh38_gencode.v35.transcripts.fa"
 refAnnot = "/home/stavros/references/reference_annotation/GRCh38_gencode.v35.primary_assembly.annotation.gtf"
 refAnnot_bed = "/home/stavros/references/reference_annotation/GRCh38_gencode.v35.primary_assembly.annotation.bed"
 refAnnot_bed12 = "/home/stavros/references/reference_annotation/bed12/gencode.v35.primary_assembly.annotation.bed12"
@@ -42,10 +43,11 @@ uniprot = "/home/stavros/references/trinity_db/uniprot_sprot.pep"
 tmhmm_exe = "/home/stavros/playground/progs/tmhmm-2.0c/bin/tmhmm"
 rnammer_exe = "/home/stavros/playground/progs/rnammer_v1.2/rnammer"
 rnammerTransc = "/home/stavros/playground/progs/Trinotate/util/rnammer_support/RnammerTranscriptome.pl"
+### Alternative splicing events
+suppa = "python3 /home/stavros/playground/progs/SUPPA/suppa.py"
 
 
-
-usage = "nanodRNA_analysis [options]"
+usage = "nanoanalysis [options]"
 epilog = " -- June 2019 | Stavros Giannoukakos -- "
 description = "DESCRIPTION"
 
@@ -78,15 +80,15 @@ startTime = datetime.now()
 
 # Main folder hosting the analysis
 analysis_dir = os.path.join(script_dir, "batch3_analysis_v3.6.1")
-# analysis_dir = os.path.join(script_dir, "batch1_analysis_v3.6.1")
-# analysis_dir = os.path.join(script_dir, "batch1Nbatch3_analysis_v3.6.1")
 
 prepr_dir = os.path.join(analysis_dir, "preprocessed_data")
 alignments_dir = os.path.join(analysis_dir, "alignments")
+transcriptome_alignments_dir = os.path.join(analysis_dir, "transcriptome_alignment")
 reports_dir = os.path.join(analysis_dir, "reports")
 # Reporting directories
 initial_qc_reports = os.path.join(analysis_dir, "reports/QC_initial")
-postAlignment_reports = os.path.join(analysis_dir, "reports/QC_post")
+postAlignment_gn_reports = os.path.join(analysis_dir, "reports/QC_post/genome")
+postAlignment_tr_reports  = os.path.join(analysis_dir, "reports/QC_post/transcriptome")
 coverage_reports = os.path.join(analysis_dir, "reports/coverage")
 pipeline_reports = os.path.join(analysis_dir, "reports/pipeline_reports")
 # Downstream analysis directories
@@ -94,6 +96,7 @@ expression_analysis_dir = os.path.join(analysis_dir, "expression_analysis")
 fusions_events_jaffa = os.path.join(analysis_dir, "jaffa_fusion_analysis")
 antisense_dir = os.path.join(analysis_dir, "expression_analysis/antisense_genes_analysis")
 differential_expression = os.path.join(analysis_dir, "expression_analysis/differential_expression")
+alternative_splicing = os.path.join(analysis_dir, "expression_analysis/alternative_splicing_events")
 polyA_analysis_dir = os.path.join(analysis_dir, "polyA_estimation")
 # Subdirectories
 methylation_dir = os.path.join(analysis_dir, "methylation_analysis")
@@ -133,7 +136,7 @@ def quality_control(seq_summary_file, sample_id, raw_data_dir):
 
 def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file):
 	""" Using Minimap2 to align the raw data against the reference genome """
-	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ALIGNING AGAINSTE THE REF. GENOME')
+	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} ALIGNING AGAINSTE THE REF. GENOME and TRANSCRIPTOME')
 
 	
 	if not os.path.exists(alignments_dir): os.makedirs(alignments_dir)
@@ -141,7 +144,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	# Remove reads with length smaller than 47 nucleotides
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Filtering out reads with lenght less than 47nt: in progress ..')
 	filtered_fastq = f'{alignments_dir}/{sample_id}.filt.fastq'
-	# subprocess.run(f'seqtk seq -L 47 {fastq_pass} > {filtered_fastq}', shell=True)
+	subprocess.run(f'seqtk seq -L 47 {fastq_pass} > {filtered_fastq}', shell=True)
 
 	### ALIGN THE RAW READS AGAINST THE REFERENCE GENOME
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Minimap2 - Mapping {sample_id} against the reference genome: in progress ..')
@@ -150,7 +153,7 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	"minimap2",  # Call minimap2 (v2.17-r941)
 	"-t", args.threads,  # Number of threads to use
 	"-ax splice",   # Long-read spliced alignment mode and output in SAM format (-a)
-	"-k 13",  # k-mer size
+	"-k 14",  # k-mer size
 	"-uf",  # Find canonical splicing sites GT-AG - f: transcript strand
 	"--secondary=no",  # Do not report any secondary alignments
 	"--MD",  # output the MD tag
@@ -164,40 +167,61 @@ def alignment_against_ref(fastq_pass, sample_id, raw_data_dir, seq_summary_file)
 	"2>>", os.path.join(pipeline_reports, "alignment_minimap2-report.txt")])  # Directory where all reports reside
 	# subprocess.run(minimap2_genome, shell=True)
 	# subprocess.run(f'samtools index -@ {args.threads} {bam_file}', shell=True)
+	# mapping_qc(sample_id, seq_summary_file, bam_file, postAlignment_gn_reports)
 	
-	mapping_qc(sample_id, seq_summary_file, bam_file)
+	if not os.path.exists(transcriptome_alignments_dir): os.makedirs(transcriptome_alignments_dir)
+	
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Minimap2 - Mapping {sample_id} against the reference transcriptome...')
+	bam_tr_file = f"{transcriptome_alignments_dir}/{sample_id}.transcriptome.bam"		
+	minimap2_transcriptome = " ".join([
+	"minimap2",  # Call minimap2 (v2.17-r941)
+	"-t", args.threads,  # Number of threds to use
+	"-ax map-ont",
+	"-k 14",  # k-mer size
+	"--secondary=no",  # Higher junction accuracy
+	refTranscGRCh38,  # Inputting the reference transcriptome
+	filtered_fastq,  # Input .fastq.gz file
+	"|", "samtools sort",  # Calling 'samtools sort' to sort the output alignment file
+	"--threads", args.threads,  # Number of threads to be used by 'samtools sort'
+	"--output-fmt BAM",  # Output in BAM format
+	"-",  # Input from standard output
+	"-o", bam_tr_file,  # Sorted output  BAM file
+	"2>>", os.path.join(pipeline_reports, "minimap2_transcriptome-report.txt")])  # Directory where all FastQC and Cutadapt reports reside
+	# subprocess.run(minimap2_transcriptome, shell=True)
+	# subprocess.run(f'samtools index -@ {args.threads} {bam_tr_file}', shell=True)
+	mapping_qc(sample_id, seq_summary_file, bam_tr_file,  postAlignment_tr_reports)
 	return
 
-def mapping_qc(sample_id, seq_summary_file, bam_file):
+def mapping_qc(sample_id, seq_summary_file, bam_file, postAlignment_reports):
 	""" Outputting multiple alignment statistics """
 	print(f'\n\t{datetime.now().strftime("%d.%m.%Y %H:%M")} GENERATING ALIGNMENT STATS')
 	
 
 	if not os.path.exists(postAlignment_reports): os.makedirs(postAlignment_reports)
 	
-	# ### EXPORTING ALIGNMENT STATS
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  PycoQC - Generating post-alignment stats of {sample_id}: in progress ..')
-	# pycoQC = " ".join([
-	# "pycoQC",  # Call pycoQC
-	# "--quiet",  # Reduce verbosity
-	# "--summary_file", seq_summary_file, 
-	# "--bam_file", bam_file,  # Input of bam files from Minimap2
-	# "--html_outfile", os.path.join(postAlignment_reports, f"{sample_id}.pycoQC-report.html"),  # Create the report in the reports directory
-	# "--report_title", "\"Post-alignment quality control report\"",  # A title to be used in the html report
-	# "2>>", os.path.join(pipeline_reports, "postalignment_pycoQC-report.txt")])
-	# subprocess.run(pycoQC, shell=True)
+	### EXPORTING ALIGNMENT STATS
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  PycoQC - Generating post-alignment stats of {sample_id}: in progress ..')
+	pycoQC = " ".join([
+	"pycoQC",  # Call pycoQC
+	"--quiet",  # Reduce verbosity
+	"--summary_file", seq_summary_file, 
+	"--bam_file", bam_file,  # Input of bam files from Minimap2
+	"--html_outfile", os.path.join(postAlignment_reports, f"{sample_id}.pycoQC-report.html"),  # Create the report in the reports directory
+	"--report_title", "\"Post-alignment quality control report\"",  # A title to be used in the html report
+	"2>>", os.path.join(pipeline_reports, "postalignment_pycoQC-report.txt")])
+	subprocess.run(pycoQC, shell=True)
 
-	# # Picard CollectAlignmentSummaryMetrics
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Picard - Collecting alignment summary metrics of {sample_id}: in progress ..')
-	# CollectAlignmentSummaryMetrics = ' '.join([
-	# "PicardCommandLine CollectAlignmentSummaryMetrics",  # Call picard-tools CollectAlignmentSummaryMetrics
-	# "VERBOSITY= ERROR",  # Control verbosity of logging
-	# "QUIET= true",  # Whether to suppress job-summary info on System.err
-	# f"INPUT= {bam_file}",  # Input BAM file
-	# f"OUTPUT= {postAlignment_reports}/{sample_id}.alignment_metrics.txt",  # Output
-	# f"REFERENCE_SEQUENCE= {refGenomeGRCh38}",  # Reference sequence file
-	# "2>>", os.path.join(pipeline_reports, "postalignment_collectAlignmentSummaryMetrics-report.txt")])
-	# subprocess.run(CollectAlignmentSummaryMetrics, shell=True) 
+	# Picard CollectAlignmentSummaryMetrics
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Picard - Collecting alignment summary metrics of {sample_id}: in progress ..')
+	CollectAlignmentSummaryMetrics = ' '.join([
+	"PicardCommandLine CollectAlignmentSummaryMetrics",  # Call picard-tools CollectAlignmentSummaryMetrics
+	"VERBOSITY= ERROR",  # Control verbosity of logging
+	"QUIET= true",  # Whether to suppress job-summary info on System.err
+	f"INPUT= {bam_file}",  # Input BAM file
+	f"OUTPUT= {postAlignment_reports}/{sample_id}.alignment_metrics.txt",  # Output
+	f"REFERENCE_SEQUENCE= {refTranscGRCh38}",  # Reference sequence file
+	"2>>", os.path.join(pipeline_reports, "postalignment_collectAlignmentSummaryMetrics-report.txt")])
+	subprocess.run(CollectAlignmentSummaryMetrics, shell=True) 
 
 	# # Check duplicate reads
 	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  Picard - Extracting read duplication stats of {sample_id}: in progress ..')
@@ -210,14 +234,14 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# subprocess.run(duplicate_reads, shell=True)
 	# subprocess.run(f'rm {alignments_dir}/{sample_id}.genome.dedup.bam', shell=True)
 
-	# # BAM stats
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  BAM stats - Generating post-alignment stats of {sample_id}: in progress ..')
-	# bam_stat = ' '.join([
-	# "bam_stat.py",
-	# "-i", bam_file,  # Input BAM file
-	# f"> {postAlignment_reports}/{sample_id}.bamstat.txt",  # Output file
-	# "2>>", os.path.join(pipeline_reports, "postalignment_bamstats-report.txt")])
-	# subprocess.run(bam_stat, shell=True)
+	# BAM stats
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  BAM stats - Generating post-alignment stats of {sample_id}: in progress ..')
+	bam_stat = ' '.join([
+	"bam_stat.py",
+	"-i", bam_file,  # Input BAM file
+	f"> {postAlignment_reports}/{sample_id}.bamstat.txt",  # Output file
+	"2>>", os.path.join(pipeline_reports, "postalignment_bamstats-report.txt")])
+	subprocess.run(bam_stat, shell=True)
 
 	# # BAM read distribution
 	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  RSeQC - Generating read distribution stats of {sample_id}: in progress ..')
@@ -250,14 +274,14 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	# "2>>", os.path.join(pipeline_reports, "postalignment_gene_coverage-report.txt")])
 	# subprocess.run(gene_coverage, shell=True)
 
-	# # Number of reads mapped to each chromosome
-	# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  RSeQC - Generating mapping stats of {sample_id}: in progress ..')
-	# mapping_pos = ' '.join([
-	# "samtools idxstats",  # Call samtools idxstats
-	# bam_file,  # Input BAM file
-	# f"> {postAlignment_reports}/{sample_id}.samtools_idxstats.txt",  # Output file
-	# "2>>", os.path.join(pipeline_reports, "postalignment_samtools_idxstats-report.txt")])
-	# subprocess.run(mapping_pos, shell=True)
+	# Number of reads mapped to each chromosome
+	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  RSeQC - Generating mapping stats of {sample_id}: in progress ..')
+	mapping_pos = ' '.join([
+	"samtools idxstats",  # Call samtools idxstats
+	bam_file,  # Input BAM file
+	f"> {postAlignment_reports}/{sample_id}.samtools_idxstats.txt",  # Output file
+	"2>>", os.path.join(pipeline_reports, "postalignment_samtools_idxstats-report.txt")])
+	subprocess.run(mapping_pos, shell=True)
 
 	# QualiMap QC
 	print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  QualiMap rnaseq - Performing QC control on {sample_id}: in progress ..')
@@ -266,7 +290,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	"--java-mem-size=15G",  # Set Java memory heap size
 	"-bam", bam_file,  # Input BAM file
 	"-gtf", refAnnot,  # Annotations file in Ensembl GTF format
-	"-outdir", f'{coverage_reports}/{sample_id}/',  # Output folder for HTML report and raw data
+	"-outdir", f'{coverage_reports}/qualimap_rnaseq_transcriptome/{sample_id}/transcriptome',  # Output folder for HTML report and raw data
 	# "2>>", os.path.join(pipeline_reports, "postalignment_qualimap_rnaseq-report.txt")
 	])
 	subprocess.run(qualimp, shell=True)
@@ -280,7 +304,7 @@ def mapping_qc(sample_id, seq_summary_file, bam_file):
 	"--genome-gc-distr hg19",  # Species to compare with genome GC distribution
 	"-bam", bam_file,  # Input BAM file
 	"--feature-file", refAnnot,  # Annotations file in Ensembl GTF format
-	"-outdir", f'{coverage_reports}/{sample_id}/',  # Output folder for HTML report and raw data
+	"-outdir", f'{coverage_reports}/qualimap_bamqc_transcriptome/{sample_id}/transcriptome',  # Output folder for HTML report and raw data
 	# "2>>", os.path.join(pipeline_reports, "postalignment_qualimap_bamqc-report.txt")
 	])
 	subprocess.run(qualimp, shell=True)
@@ -845,12 +869,13 @@ class expression_analysis:
 class downstream_analysis:
 
 	def __init__(self):
-		self.polyA_preprocessing()
-		self.differential_polyadelylation_analysis()
-		self.differential_expression_analysis()
-		self.most_dominant_transcript()
-		self.combine_dte_dpa_results()
-		self.fusions_events_jaffa()
+		# self.polyA_preprocessing()
+		# self.differential_polyadelylation_analysis()
+		# self.differential_expression_analysis()
+		# self.most_dominant_transcript()
+		# self.combine_dte_dpa_results()
+		# self.fusions_events_jaffa()
+		self.alternative_splicing()
 		return
 
 	def polyA_preprocessing(self):
@@ -1382,22 +1407,44 @@ class downstream_analysis:
 		os.system(f'mv {fusion_file} {fusion_annot}')
 		return
 
+	def alternative_splicing(self):
+		
+		if not os.path.exists(alternative_splicing): os.makedirs(alternative_splicing)
+
+
+		### Generating the events from the annotation GTF file
+		print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  SUPPA - Examining data for potential alternative splicing (AS) events: in progress ..')
+		detect_as = " ".join([
+		suppa,  # Call suppa.py python script
+		"generateEvents",  # Calling generateEvents script
+		"--format ioi",  # Format of the annotation file
+		"--input-file", os.path.join(expression_analysis_dir, "database_talon.gtf"),  # Input annotation file in GTF format
+		"--output-file", f"{alternative_splicing}/suppa_generateEvents",  # Output file
+		# "2>>", os.path.join(pipeline_reports, "suppa_generateEvents-report.txt")
+		])  # Directory where all reports reside
+		subprocess.run(detect_as, shell=True)
+
+		### Differential splicing analysis for transcripts and local events
+		# print(f'{datetime.now().strftime("%d.%m.%Y %H:%M")}  SUPPA - Examining data for potential alternative splicing (AS) events: in progress ..')
+		return
+
+
 def summary():
 	
 	multiQC = " ".join([
 	"multiqc",  # Call MultiQC
 	"--quiet",  # Print only log warnings
-	"--outdir", postAlignment_reports,  # Create report in the FastQC reports directory
+	"--outdir", postAlignment_gn_reports,  # Create report in the FastQC reports directory
 	"--filename", "post-alignment_summarised_report",  # Name of the output report 
-	postAlignment_reports,  # Directory where all FastQC and Cutadapt reports reside
+	postAlignment_gn_reports,  # Directory where all FastQC and Cutadapt reports reside
 	"2>>", os.path.join(pipeline_reports, "summary_postalignment_multiQC-report.txt")])  # Output multiQC report
 	subprocess.run(multiQC, shell=True)
 
-	pickle_files = [pk_file for pk_file in glob.glob(os.path.join(postAlignment_reports, "*_qc.pk"))]
+	pickle_files = [pk_file for pk_file in glob.glob(os.path.join(postAlignment_gn_reports, "*_qc.pk"))]
 	### Wub Compare alignment QC statistics of multiple samples
 	bam_multi_qc = ' '.join([
 	"bam_multi_qc.py",
-	"-r", "{0}/comparison_qc.pdf".format(postAlignment_reports),  # Output pdf file
+	"-r", "{0}/comparison_qc.pdf".format(postAlignment_gn_reports),  # Output pdf file
 	' '.join(pickle_files),
 	"2>>", os.path.join(pipeline_reports, "summary_multi_qc-report.txt")])
 	# subprocess.run(bam_multi_qc, shell=True)
@@ -1426,13 +1473,13 @@ def summary():
 				os.remove(file)
 
 	## Cleaning up postanalysis folder
-	individual_postal_reports = os.path.join(postAlignment_reports, "individual_reports")
+	individual_postal_reports = os.path.join(postAlignment_gn_reports, "individual_reports")
 	if not os.path.exists(individual_postal_reports): os.makedirs(individual_postal_reports)
 
 	# Moving files to "qc_reports" directory
-	# os.system('mv {0}/*_qc.pk {1}'.format(postAlignment_reports, qc_reports))
-	os.system('mv {0}/*.txt {1}'.format(postAlignment_reports, individual_postal_reports))
-	os.system('mv {0}/*.fragSize {1}'.format(postAlignment_reports, individual_postal_reports))
+	# os.system('mv {0}/*_qc.pk {1}'.format(postAlignment_gn_reports, qc_reports))
+	os.system('mv {0}/*.txt {1}'.format(postAlignment_gn_reports, individual_postal_reports))
+	os.system('mv {0}/*.fragSize {1}'.format(postAlignment_gn_reports, individual_postal_reports))
 
 	### Removing unnecessary files
 	# subprocess.run(f'rm {alignments_dir}/*.fastq*', shell=True)  # Removing the extracted fastq
@@ -1447,15 +1494,15 @@ def main():
 	summary_files = [str(file_path) for file_path in Path(ont_data).glob('**/sequencing_summary.txt') if not "warehouse" in str(file_path)]
 	num_of_samples = len(summary_files)
 
-	for sum_file in sorted([s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]):
-		raw_data_dir = os.path.dirname(str(sum_file))
-		sample_id = os.path.basename(raw_data_dir)
-		fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
-		print(f'\nPROCESSING SAMPLE {sample_id}')
+	# for sum_file in sorted([s for s in summary_files if os.path.dirname(s).endswith(chosen_samples)]):
+	# 	raw_data_dir = os.path.dirname(str(sum_file))
+	# 	sample_id = os.path.basename(raw_data_dir)
+	# 	fastq_pass = " ".join(glob.glob(os.path.join(raw_data_dir, "pass/*pass.fastq.gz")))
+	# 	print(f'\nPROCESSING SAMPLE {sample_id}')
 		
 		# quality_control(sum_file, sample_id, raw_data_dir)
 
-		alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
+		# alignment_against_ref(fastq_pass, sample_id, raw_data_dir, sum_file)
 
 		# polyA_estimation(sample_id, sum_file, fastq_pass, raw_data_dir)
 
@@ -1464,7 +1511,7 @@ def main():
 
 	# expression_analysis()
 
-	# downstream_analysis()
+	downstream_analysis()
 
 	# methylation_detection_eligos2()
 
