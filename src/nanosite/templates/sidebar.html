@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<!-- Created by CodingLab |www.youtube.com/CodingLabYT-->
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8">
+    <title> NanoAnalysis </title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static  'CSS/sidebar_style.css' %}">
+    <!-- Boxiocns CDN Link -->
+    <link href='https://unpkg.com/boxicons@2.1.2/css/boxicons.min.css' rel='stylesheet'>
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   </head>
+
+<body>
+  <div class="sidebar close">
+    <div class="logo-details">
+      <i class='bx bx-atom'></i>
+      <span class="logo_name">NanoAnalysis</span>
+    </div>
+    <ul class="nav-links">
+
+      <!-- Home tab -->
+      <li>
+        <a href="#">
+          <i class='bx bx-home'></i>
+          <span class="link_name">Home</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">Home</a></li>
+        </ul>
+      </li>
+
+      <!-- Upload tab -->
+      <li>
+        <a href="#">
+          <i class='bx bx-cloud-upload'></i>
+          <span class="link_name">Upload</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">Upload your Data!</a></li>
+        </ul>
+      </li>
+
+      <!-- About tab -->
+      <li>
+        <div class="iocn-link">
+          <a href="#">
+            <i class='bx bx-info-square'></i>
+            <span class="link_name">Category</span>
+          </a>
+          <i class='bx bxs-chevron-down arrow' ></i>
+        </div>
+        <ul class="sub-menu">
+          <li><a class="link_name" href="#">About</a></li>
+          <li><a href="#">Overview</a></li>
+          <li><a href="#">How to Use?</a></li>
+          <li><a href="#">Video Tutorial</a></li>
+        </ul>
+      </li>
+
+      <!-- Example data tab -->
+      <li>
+        <a href="#">
+          <i class='bx bx-run'></i>
+          <span class="link_name">Example</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">Run our Example</a></li>
+        </ul>
+      </li>
+
+      <!-- Analytics tab -->
+      <li>
+        <a href="#">
+          <i class='bx bx-scatter-chart'></i>
+          <span class="link_name">Analytics</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">Website Analytics</a></li>
+        </ul>
+      </li>
+
+      <!-- Contact tab -->
+      <li>
+        <div class="iocn-link">
+          <a href="#">
+            <i class='bx bx-envelope-open' ></i>
+            <span class="link_name">Contact</span>
+          </a>
+          <i class='bx bxs-chevron-down arrow' ></i>
+        </div>
+        <ul class="sub-menu">
+          <li><a class="link_name" href="#">Contact Us</a></li>
+          <li><a href="#">Report an Issue</a></li>
+          <li><a href="#">Give us Feedback</a></li>
+        </ul>
+      </li>
+
+      <!-- Cite tab -->
+      <li>
+        <a href="#">
+          <i class='bx bx-popsicle'></i>
+          <span class="link_name">Citing</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">How to Cite Us?</a></li>
+        </ul>
+      </li>
+
+      <!-- Setting tab -->
+      <li>
+        <a href="#">
+          <i class='bx bx-cog' ></i>
+          <span class="link_name">Setting</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">Parameters I Used</a></li>
+        </ul>
+      </li>
+
+      <!-- Download tab -->
+      <li>
+        <a href="#">
+          <i class='bx bxs-download' ></i>
+          <span class="link_name">Download</span>
+        </a>
+        <ul class="sub-menu blank">
+          <li><a class="link_name" href="#">Download my Results</a></li>
+        </ul>
+      </li>
+
+      <!-- Download tab -->
+      <!-- <li>
+        <div class="iocn-link">
+          <a href="#">
+            <i class='bx bxs-download' ></i>
+            <span class="link_name">Download</span>
+          </a>
+          <i class='bx bxs-chevron-down arrow' ></i>
+        </div>
+        <ul class="sub-menu">
+          <li><a class="link_name" href="#">Download results</a></li>
+          <li><a href="#">All</a></li>
+          <li><a href="#"></a>Exploratory Analysis</li>
+          <li><a href="#"></a>Differential Expression</li>
+          <li><a href="#"></a>Machine Learning</li>
+        </ul>
+      </li> -->
+
+</ul>
+  </div>
+  <section class="home-section">
+    <div class="home-content">
+      <i class='bx bx-menu' ></i>
+    </div>
+  </section>
+  <script>
+  let arrow = document.querySelectorAll(".arrow");
+  for (var i = 0; i < arrow.length; i++) {
+    arrow[i].addEventListener("click", (e)=>{
+   let arrowParent = e.target.parentElement.parentElement;//selecting main parent of arrow
+   arrowParent.classList.toggle("showMenu");
+    });
+  }
+  let sidebar = document.querySelector(".sidebar");
+  let sidebarBtn = document.querySelector(".bx-menu");
+  console.log(sidebarBtn);
+  sidebarBtn.addEventListener("click", ()=>{
+    sidebar.classList.toggle("close");
+  });
+  </script>
+</body>
+</html>

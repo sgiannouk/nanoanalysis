@@ -6,11 +6,11 @@ INITIAL STEPS
 - build a Python environment (DONE)
 - create Django project (DONE)
 - connect Django project with GitHub (DONE)
-- make website logo (DONE)
+- make website logo (NEEDS TO BE REDONE)
 
-BUILDING THE WEBSITE 
+BUILDING THE WEBSITE
 We will need the following HTML pages
-1. home page (with navigation bar, tabs etc)
+1. base page (with navigation bar, tabs etc)
 2. give suggestions/feedback page
 3. report an issue page
 4. how to use the site page/tutorial (perhaps also video included?)
@@ -18,7 +18,7 @@ We will need the following HTML pages
 6. how to cite page
 7. overview of the analysis (which tools are we using etc)
 8. example data?
-9.
+9. home page
 
 
 INDIVIDUAL PAGES
@@ -30,4 +30,3 @@ INDIVIDUAL PAGES
 	- upload clinical data file in txt, tab or excel format
 	- show settings:
 	  i.
-
