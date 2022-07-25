@@ -1,2 +1,2 @@
 # nStringAnalysis
-Website dedicated to online NanoString data analysis  Topics Resources
+NanoSite: website dedicated to online data analysis
